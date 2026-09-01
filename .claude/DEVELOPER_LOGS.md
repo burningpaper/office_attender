@@ -563,3 +563,51 @@ registration. It was simply the wrong credential for the job.
 **Unrelated, noticed in passing:** `VML - Bloodstream - Create Meeting Request` has an Azure
 client secret hardcoded in plaintext in its token node, readable by anyone with n8n API
 access. Flagged to the user; not ours to change.
+
+## 2026-09-01 — Stage 8: the door
+
+Every stage since the sixth has ended with the same sentence: there is no authentication,
+and this must not be deployed. That is now dealt with.
+
+A single shared password guards the whole application. That is the right weight for one
+person looking at their own company's attendance, and it is trivially upgradeable to
+Microsoft SSO later — the Azure app registration already exists — without touching
+anything else. What it must not be is casual, because the app holds named employees,
+reasons for absence including illness and maternity leave, and everybody's work address.
+
+Next 16 has quietly renamed `middleware.ts` to `proxy.ts`. The old name still builds and
+logs a deprecation, which is the kind of thing that would have worked fine today and
+puzzled somebody in a year, so it was worth the two minutes to check rather than assume.
+
+### Closed by default
+
+The design decision worth recording is that the proxy lists the open paths explicitly and
+closes everything else. The alternative — matching the routes that need protecting — is
+one forgotten entry away from a leak, and the forgotten entry is always the route somebody
+adds in a hurry. There is a test that asserts a route nobody has thought of yet is
+private, which sounds like a joke until you consider that it will still be there when
+somebody adds `/api/export-everything`.
+
+Two smaller things in the same spirit. A missing `AUTH_SECRET` returns a 500 rather than
+falling open, because the safe reading of "I cannot check whether you are allowed in" is
+no. And the login page's `next` parameter only ever redirects within the application: an
+open redirect there would let a link that looks like ours deposit somebody somewhere that
+is not.
+
+Sessions are HMAC-signed with Web Crypto rather than `node:crypto`, because the proxy runs
+on the edge runtime where the Node module does not exist. Twelve-hour expiry, httpOnly,
+sameSite lax, secure in production, constant-time password comparison, and a fifth of a
+second of delay on a wrong answer — not rate limiting, since there is nowhere shared to
+count attempts, but enough to make a guessing loop tedious.
+
+### Checked, not assumed
+
+The unit tests cover forged signatures, tampered payloads, expiry and nonsense input. But
+the test that actually matters was done over HTTP against the running application: every
+page, every API route, with no cookie, grepping each response body for employee names and
+addresses. Pages redirect, routes answer 401, nothing leaks, and a forged cookie is
+refused.
+
+**Not done:** the deploy. The Vercel CLI is installed but not signed in, and publishing an
+application full of personal information is not something to do on an assumption. Waiting
+on a decision.
