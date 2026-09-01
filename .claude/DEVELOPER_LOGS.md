@@ -276,3 +276,56 @@ calling comfortably beats caching the call.
 until then `npm run reasons:classify -- --show` prints exactly what would be sent.
 
 **Next:** Stage 6, the web interface.
+
+## 2026-09-01 — Stage 6: the interface
+
+The report finally has a face, and the first thing it had to prove is that the September
+problem is really fixed. It is: open the page on the 1st and you get seventy-five dashes,
+a quiet note saying the month has not started, and nobody accused of anything.
+
+Which immediately exposed a second, smaller problem. A column of dashes is honest but
+useless — you cannot sort it, cannot learn anything from it, and the default view is
+therefore a dead end on the first of every month. Changing the specified default felt
+wrong; the spec says current month and that is a reasonable thing to want. So the header
+now says what is going on and offers a way forward: *"No required day has come round yet
+this month, so every verdict below reads 'not yet'. Look at August instead."* The default
+stays as specified, and nobody lands on an empty screen with no idea what to do next.
+
+### Logic that lives in a component is logic nobody tests
+
+The sorting started life inside the table component, where it worked and could not be
+tested. Verdicts are not booleans — NO, YES, NA and EXEMPT have to order sensibly, and
+"sensibly" means worst-first, because that is what somebody opening a compliance report
+wants to see. That rule deserves a test, so it moved to `lib/compliance/sort.ts` and got
+twelve.
+
+One of those tests earns its place on its own: somebody who has never attended sorts as
+the most overdue rather than as missing data. An empty string sorts before every real
+date, so ascending puts them at the top. Francesca Tiganis and Jenny Luxton have not been
+in the office once in seven months, and they should be the first two rows when you sort by
+last attended, not the last two.
+
+### What the expanded row is for
+
+The question after "why is Carlos Feyder red?" is always "which days, and did he say
+why?". Clicking his row answers it in place: eight required days in August, four in the
+office, three explained — two on leave, one Family Responsibility — and one plain absence
+on Wednesday the 26th. That is the `4/5 +3ex` in his row, spelled out.
+
+The reason chips currently show the raw spreadsheet text because stage 5's classification
+has not run yet. They will show the tidied version the moment it does, with no other change.
+
+### Judgement calls
+
+The design named TanStack Table. Eighty-two rows and five columns did not justify a
+dependency, and hand-rolling the comparator gave better control over the tri-state
+ordering, so it was dropped.
+
+Colour is spent almost entirely on the verdicts. This is a document somebody scans for
+exceptions, and if the furniture competes with the signal, the signal loses.
+
+**Not yet done, and important:** there is no authentication on this page. It is a named
+list of employees with illness and maternity records attached. Stage 8, and it must not be
+deployed before then.
+
+**Next:** Stage 7, the upload screen with its preview-and-approve gate.

@@ -44,31 +44,34 @@ async function main() {
     process.exit(1);
   }
 
-  try {
-    var report = await syncReasonClassifications(db, createAnthropicClassifier());
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/credit balance is too low/i.test(message)) {
-      console.error(
-        "The API key and workspace are correct, but the account has no credits.\n\n" +
-          "Add credits at console.anthropic.com → Plans & Billing, then re-run.\n" +
-          "This job is one request covering 35 strings — a few cents at most.\n\n" +
-          "Nothing else is blocked: the app works with reasons left unclassified,\n" +
-          "and running this later reclassifies them without a re-import.",
-      );
-      process.exit(1);
-    }
-    if (/anthropic-workspace-id/i.test(message)) {
-      console.error(
-        "This API key is identity-linked, so it must name the workspace it acts in.\n\n" +
-          "Add to .env.local:\n  ANTHROPIC_WORKSPACE_ID=wrkspc_...\n\n" +
-          "Find it in the Anthropic Console under Settings → Workspaces (the id in\n" +
-          "the workspace's URL). Then re-run this command.",
-      );
-      process.exit(1);
-    }
-    throw error;
-  }
+  const report = await syncReasonClassifications(db, createAnthropicClassifier()).catch(
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (/credit balance is too low/i.test(message)) {
+        console.error(
+          "The API key and workspace are correct, but the account has no credits.\n\n" +
+            "Add credits at console.anthropic.com → Plans & Billing, then re-run.\n" +
+            "This job is one request covering 35 strings — a few cents at most.\n\n" +
+            "Nothing else is blocked: the app works with reasons left unclassified,\n" +
+            "and running this later reclassifies them without a re-import.",
+        );
+        process.exit(1);
+      }
+
+      if (/anthropic-workspace-id/i.test(message)) {
+        console.error(
+          "This API key is identity-linked, so it must name the workspace it acts in.\n\n" +
+            "Add to .env.local:\n  ANTHROPIC_WORKSPACE_ID=wrkspc_...\n\n" +
+            "Find it in the Anthropic Console under Settings → Workspaces (the id in\n" +
+            "the workspace's URL). Then re-run this command.",
+        );
+        process.exit(1);
+      }
+
+      throw error;
+    },
+  );
 
   if (report.noCallMade) {
     console.log(`Nothing to classify — all ${report.skipped} strings are already settled.`);

@@ -1,69 +1,111 @@
-import Image from "next/image";
+import { sql } from "drizzle-orm";
+import { ComplianceTable } from "./components/compliance-table";
+import { loadEmployeeRows } from "@/lib/compliance/load";
+import { db } from "@/lib/db/client";
+import { attendance } from "@/lib/db/schema";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+/** Today, as the server sees it. Overridable for looking at a past day. */
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string; asOf?: string }>;
+}) {
+  const params = await searchParams;
+  const asOf = params.asOf ?? today();
+  const month = params.month ?? asOf.slice(0, 7);
+
+  // The months that actually have data, for the picker.
+  const monthRows = await db
+    .select({ month: sql<string>`to_char(${attendance.date}, 'YYYY-MM')` })
+    .from(attendance)
+    .groupBy(sql`to_char(${attendance.date}, 'YYYY-MM')`)
+    .orderBy(sql`to_char(${attendance.date}, 'YYYY-MM')`);
+
+  const months = monthRows.map((r) => r.month);
+  if (!months.includes(month)) months.push(month);
+  months.sort();
+
+  const rows = await loadEmployeeRows(db, month, asOf);
+
+  const monthLabel = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  /**
+   * How many required days have actually elapsed. Worth stating plainly at the
+   * top: it is the denominator behind every verdict in the table, and when it
+   * is zero the whole column reading "—" stops being alarming.
+   */
+  const elapsed = rows.find((r) => !r.isExempt);
+  const elapsedRequired = elapsed
+    ? elapsed.monthly.required + elapsed.monthly.excused
+    : 0;
+
+  /**
+   * The month defaults to the current one, as specified - but on the 1st that
+   * means every verdict is honestly "not yet", and the column is dead. Rather
+   * than change the default, point at the last month that can actually answer
+   * the question.
+   */
+  const previousMonth =
+    elapsedRequired === 0
+      ? months.filter((m) => m < month).sort().pop() ?? null
+      : null;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
+    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+      <header className="mb-7">
+        <h1 className="text-xl font-semibold tracking-tight">Office attendance</h1>
+        <p className="mt-1 text-sm text-muted">
+          {monthLabel} · Wednesdays and Fridays ·{" "}
+          <span className="tabular">
+            {elapsedRequired} required day{elapsedRequired === 1 ? "" : "s"} so far
+          </span>
+          {elapsedRequired === 0 && (
+            <span className="text-subtle"> — the month has not started yet</span>
+          )}
+        </p>
+
+        {previousMonth && (
+          <p className="mt-3 rounded-md border border-border-soft bg-surface-muted px-3 py-2 text-sm text-muted">
+            No required day has come round yet this month, so every verdict below
+            reads &ldquo;not yet&rdquo;.{" "}
             <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              href={`?month=${previousMonth}`}
+              className="font-medium text-foreground underline underline-offset-2 transition-opacity hover:opacity-70"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+              Look at{" "}
+              {new Date(`${previousMonth}-01T00:00:00Z`).toLocaleDateString("en-GB", {
+                month: "long",
+                timeZone: "UTC",
+              })}{" "}
+              instead
+            </a>
+            .
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        )}
+      </header>
+
+      <ComplianceTable rows={rows} month={month} asOf={asOf} months={months} />
+
+      <footer className="mt-8 border-t border-border-soft pt-4 text-xs text-subtle">
+        <p>
+          Compliance counts only required days that have already happened, excludes public
+          holidays, and treats an explained absence as neutral. Exempt people are hidden by
+          default.
+        </p>
+        <p className="mt-1">
+          Showing the report as at <span className="tabular">{asOf}</span>.
+        </p>
+      </footer>
+    </main>
   );
 }

@@ -7,7 +7,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as s from "../../db/schema";
 import { freshDb } from "../../db/__tests__/helpers";

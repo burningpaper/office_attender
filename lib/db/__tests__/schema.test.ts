@@ -1,7 +1,7 @@
 /**
  * Schema tests, run against Postgres-in-WASM so the constraints are real.
  */
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as s from "../schema";
 import { seedCalendar } from "../seed-calendar";

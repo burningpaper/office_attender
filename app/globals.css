@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
+/**
+ * A quiet palette. This is a report someone scans for exceptions, so colour is
+ * spent almost entirely on the verdicts - everything else stays out of the way.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --background: #fbfbfa;
+  --surface: #ffffff;
+  --surface-muted: #f4f4f2;
+  --border: #e4e4e1;
+  --border-strong: #d3d3ce;
+  --foreground: #1a1a18;
+  --muted: #6b6b64;
+  --subtle: #94948c;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --no: #b4321f;
+  --no-bg: #fdf0ed;
+  --yes: #2f6b47;
+  --yes-bg: #eef5f0;
+  --na: #6b6b64;
+  --na-bg: #f2f2f0;
+  --exempt: #5a5aa0;
+  --exempt-bg: #f0f0f8;
+  --accent: #1a1a18;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #131312;
+    --surface: #1b1b19;
+    --surface-muted: #232320;
+    --border: #2e2e2a;
+    --border-strong: #3d3d38;
+    --foreground: #ececea;
+    --muted: #9a9a92;
+    --subtle: #6f6f68;
+
+    --no: #f08a76;
+    --no-bg: #2c1a16;
+    --yes: #7fc79a;
+    --yes-bg: #16241b;
+    --na: #9a9a92;
+    --na-bg: #222220;
+    --exempt: #a8a8e0;
+    --exempt-bg: #1d1d2b;
+    --accent: #ececea;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-soft: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-no: var(--no);
+  --color-no-bg: var(--no-bg);
+  --color-yes: var(--yes);
+  --color-yes-bg: var(--yes-bg);
+  --color-na: var(--na);
+  --color-na-bg: var(--na-bg);
+  --color-exempt: var(--exempt);
+  --color-exempt-bg: var(--exempt-bg);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Numbers in a table should line up. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-row-in { animation: row-in 200ms ease-out both; }
+
+@keyframes expand-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-expand-in { animation: expand-in 180ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-row-in,
+  .animate-expand-in { animation: none; }
+  * { transition-duration: 0.01ms !important; }
+}
+
+/* A visible, consistent focus ring for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }

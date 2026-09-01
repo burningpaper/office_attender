@@ -168,7 +168,28 @@ Success Criteria:
 - Exempt employees hidden by default, with a toggle and a header count.
 - Excused-day counts visible on the row, so a clean-looking fraction isn't misleading.
 - Verified in a browser at desktop and mobile widths; keyboard navigable.
-Status: Not Started
+Status: **Complete** — 12 new tests (151 total). Verified in a real browser at 1280px and
+375px; no console errors, no horizontal page overflow, fully keyboard operable.
+
+Notes from the build:
+- **Sorting was extracted out of the component** into `lib/compliance/sort.ts` so the
+  tri-state ordering could actually be tested. Logic trapped in a React component is
+  logic nobody tests.
+- **"Never attended" sorts as most-overdue, not as missing data.** An empty string sorts
+  before every real date, so ascending puts those people at the top where they belong.
+- **The current-month default is honest but was a dead end.** On the 1st every verdict
+  reads "not yet", so the column is uninformative. Rather than change the specified
+  default, the header now offers a link to the last month that can answer the question.
+- Row expansion shows the month's required days with reason chips — the answer to
+  "which days, and did they say why?" is one click away, not another screen.
+- Dropped TanStack Table from the design: 82 rows and five columns did not justify a
+  dependency, and hand-rolling gave better control over the tri-state comparator.
+- Accessibility verified in-browser: `aria-sort` on every sortable header, `th scope=row`
+  for names, accessible names on all expand controls, every input labelled, a table
+  caption, and a visible focus ring. `prefers-reduced-motion` disables the animations.
+
+**Not yet done:** the page has no authentication. That is stage 8, and it must not be
+deployed before then.
 
 ## Stage 7: Upload UI with preview/approve
 Goal: Drag-drop upload, seven-stage progress, diff preview, explicit approval before commit.

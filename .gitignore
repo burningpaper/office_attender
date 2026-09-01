@@ -45,3 +45,4 @@ next-env.d.ts
 /data_example.xls.xlsx
 *.xls
 *.xlsx
+.gstack/

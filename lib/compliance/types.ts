@@ -53,6 +53,19 @@ export type LongTermResult = ComplianceResult & {
   monthsCounted: number;
 };
 
+/** One required day in the selected month, for the expanded row. */
+export type DayDetail = {
+  date: string;
+  state: AttendanceState | "NO_RECORD";
+  /** The reason as written in the cell, when there was one. */
+  reasonText: string | null;
+  /** The tidied reason, once stage 5 has classified it. */
+  reasonLabel: string | null;
+  reasonCategory: string | null;
+  /** Outside this person's employment window. */
+  outsideEmployment: boolean;
+};
+
 export type EmployeeRow = {
   employeeId: number;
   displayName: string;
@@ -63,3 +76,6 @@ export type EmployeeRow = {
   longTerm: LongTermResult;
   lastAttended: string | null;
 };
+
+/** A row plus the day-by-day detail the interface expands into. */
+export type EmployeeRowWithDays = EmployeeRow & { monthDays: DayDetail[] };
