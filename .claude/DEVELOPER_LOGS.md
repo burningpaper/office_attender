@@ -225,3 +225,54 @@ is not ours to do.
 
 **Next:** Stage 5, reason normalisation, where `On leave` / `On Leave` / `on leave` finally
 become one thing.
+
+## 2026-09-01 — Stage 5: the model finally gets a job
+
+Thirty-five strings. That is the entire surface area a language model touches in this
+system, and it took four stages of work to get it that small.
+
+The attendance grid never needed one — it is 10,221 literal booleans, and running those
+through a model would have been slower, dearer and, fatally, non-deterministic. Identity
+resolution did not need one either: eighty-four name spellings collapsed to eighty-two
+people on casefolding, punctuation stripping and one conservative edit-distance rule. What
+is left is genuinely linguistic and genuinely irreducible — `On leave`, `On Leave`,
+`on leave`, `booked off`, `B/day Leave`, `Fam Res leave`, `son at ER`. No amount of string
+manipulation folds those into one another.
+
+### Two things the tests caught
+
+The first was a design gap rather than a bug. A note like `Sent Msg on Teams` says only
+that somebody sent a message; it gives no reason for the absence, so `UNKNOWN` is the
+correct and final answer. But the sync only ever selected rows still marked `UNKNOWN`,
+which meant that string would be re-sent on every run for the rest of the system's life to
+be told the same thing again. Now `model IS NULL` carries the meaning "never asked", and a
+returned `UNKNOWN` is written back with the model stamped on it: still visible to a person,
+never re-queried. That is what makes "the second run costs nothing" true rather than
+aspirational.
+
+The second was about trust. The first implementation matched the model's answers to the
+strings by array position, which is fine right up until a response comes back one entry
+short — at which point every subsequent note silently inherits its neighbour's category and
+nothing looks wrong. Matching on the returned `rawText` instead means a dropped or reordered
+entry degrades to `UNKNOWN`, loudly and locally. There is a test that removes an entry from
+the middle of a response and checks that exactly one string is affected.
+
+### Privacy, verified rather than asserted
+
+The prompt contains the reason strings and nothing else — no names, no dates, no employee
+identifiers. Rather than take that on trust, the check pulls all 153 distinct name parts
+across the 82 employees out of the database and greps the generated prompt for each. None
+appears. It happens to be the cheapest option too, but the reason is POPIA.
+
+### On caching
+
+The obvious optimisation here is prompt caching, and it is the wrong one. The system prompt
+is about 3,000 characters, which is likely below the minimum cacheable prefix anyway, and
+more to the point the database already guarantees each string is classified exactly once in
+the lifetime of the system. In steady state a monthly upload sends nothing at all. Not
+calling comfortably beats caching the call.
+
+**Still to do:** the single real request. It needs an `ANTHROPIC_API_KEY` in `.env.local`;
+until then `npm run reasons:classify -- --show` prints exactly what would be sent.
+
+**Next:** Stage 6, the web interface.

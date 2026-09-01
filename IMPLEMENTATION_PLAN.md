@@ -137,7 +137,27 @@ Success Criteria:
 - `"Office closed"` classifies as `PUBLIC_HOLIDAY_OR_CLOSURE`, not personal absence.
 - Second run makes zero model calls (cache hit on every string).
 - No employee names are included in any prompt.
-Status: Not Started
+Status: **Built and fully tested — awaiting an API key for the one real call.**
+13 new tests (139 total). The model is stubbed in tests; everything around it is verified.
+
+Notes from the build:
+- **Design gap found by the tests.** A string the model returns as `UNKNOWN` was being
+  re-sent on every subsequent run, forever, to be told the same thing. `model IS NULL` is
+  now the record of "never asked", so `UNKNOWN` becomes a settled outcome that stays
+  visible to a person without being re-queried. This is what makes "second run costs
+  nothing" actually true.
+- **Answers are matched by returned `rawText`, never array position.** If the model drops
+  or reorders an entry, the affected string degrades to `UNKNOWN` rather than silently
+  inheriting a neighbour's category. Tested both ways.
+- **Privacy verified live, not just asserted**: all 153 distinct name parts across the 82
+  employees were checked against the generated prompt. None appears. Only the 35 reason
+  strings are ever sent.
+- Prompt caching is deliberately *not* the optimisation here. The database is the cache —
+  one call per novel string in the lifetime of the system. Not calling beats caching.
+- `npm run reasons:classify -- --show` prints the exact prompt without calling anything.
+
+**To run it:** add `ANTHROPIC_API_KEY` to `.env.local`, then `npm run reasons:classify`.
+One request, ~3,000 characters, well under a cent.
 
 ## Stage 6: Web interface
 Goal: The table from the spec, plus month filter, sorting, and the expandable per-person

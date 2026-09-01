@@ -17,15 +17,18 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:status": "tsx scripts/db-status.ts",
     "db:import": "tsx scripts/import.ts",
-    "report": "tsx scripts/report.ts"
+    "report": "tsx scripts/report.ts",
+    "reasons:classify": "tsx scripts/classify-reasons.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
     "@neondatabase/serverless": "^1.1.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
