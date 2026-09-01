@@ -29,6 +29,16 @@ export type SendMessage = {
 export type SendOptions = {
   webhookUrl: string;
   secret: string;
+  /**
+   * The mailbox to send from.
+   *
+   * Required, and not cosmetic. The n8n Graph credential is app-only (client
+   * credentials), not delegated - Graph answers `/me` on it with "only valid
+   * with delegated authentication flow". An app-only token has no "me", so the
+   * mailbox must be named, and the app registration must be permitted to send
+   * as it. A mailbox it is not permitted for fails at send with
+   * ErrorAccessDenied.
+   */
   sender?: string;
   batchId: string;
   dryRun: boolean;

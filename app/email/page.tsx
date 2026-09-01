@@ -83,6 +83,13 @@ export default async function EmailPage({
         <p className="mt-1">
           Each message quotes only that person&rsquo;s own dates. Everything sent is recorded.
         </p>
+        <p className="mt-1">
+          Sent from{" "}
+          <span className="tabular">
+            {process.env.OFFICE_ATTENDANCE_SENDER ?? "(no sender configured)"}
+          </span>
+          . Run a dry run to confirm before sending.
+        </p>
       </footer>
     </main>
   );

@@ -483,3 +483,48 @@ six. Both reasons keep her out; only the label changed. A test asserts exactly t
 the first version of it asserted the label and broke.
 
 **Next:** Stage 8 — authentication, deploy, docs. Still the blocker.
+
+## 2026-09-01 — Who the mail comes from
+
+A challenge from the user: the `OFFICE_ATTENDANCE_SENDER` setting makes no sense, because
+the n8n credential is delegated and the mail will therefore come from them.
+
+That is a good objection, and I agreed with it before checking, which was the wrong order.
+Microsoft settled it in one request:
+
+> `/me request is only valid with delegated authentication flow.`
+
+The credential is app-only — client credentials, not delegated. An app-only token has no
+"me" to send as, so the mailbox has to be named in the URL, and the app registration has to
+be permitted to send from it. `OFFICE_ATTENDANCE_SENDER` is load-bearing rather than
+decorative, and mail comes from `notifications.za@vml.com`, not from any individual.
+
+A second request pinned down the shape of the credential further: `GET /users/{id}` returns
+`403 Authorization_RequestDenied`. The registration holds `Mail.Send` and nothing else,
+which is exactly what its name — "Microsoft Graph - Notifications.za Email Only" — has been
+saying all along.
+
+### A near-miss worth recording
+
+While chasing this I called `updateNode` with a `parameters` object containing only the
+`url`. That does not merge; it **replaces**. The send node silently lost its authentication
+type, its `sendBody` flag and its entire JSON payload, and the workflow stayed active and
+looked fine in the structure view.
+
+The only reason it surfaced was that the next request returned "Access token is empty"
+rather than a Graph error, which was the wrong shape of failure for what I had changed.
+Restoring the full parameter object fixed it, and a real send to an undeliverable address
+confirmed the body was back — an empty body would not have been accepted.
+
+Two lessons. `updateNode` replaces wholesale: pass the complete parameters, or use
+`patchNodeField`. And an active workflow can be broken in a way that neither the API nor
+the canvas complains about, so the check has to be an actual request.
+
+### What the dry run says now
+
+The identity node had to go. It could never work, because looking a mailbox up needs
+directory permission this credential deliberately does not have, and a node that always
+returns 403 is worse than no node. The dry run instead reports the configured sender and
+says plainly that it cannot be verified from here, and that a wrong one fails at send with
+`ErrorAccessDenied`. The emailer page shows the sender too, so it is visible before anyone
+types SEND rather than discoverable afterwards.

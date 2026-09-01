@@ -105,6 +105,7 @@ export async function sendCampaign(
     {
       webhookUrl,
       secret,
+      // App-only Graph credential: the mailbox must be named. See SendOptions.
       sender: process.env.OFFICE_ATTENDANCE_SENDER,
       batchId,
       dryRun: input.dryRun,
