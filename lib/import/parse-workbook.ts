@@ -24,6 +24,7 @@ import type {
   ParseWarning,
   ParsedEmployeeRow,
   RawAttendanceRecord,
+  SheetAnnotation,
   SheetReport,
   WorkbookParseResult,
 } from "./types";
@@ -177,9 +178,15 @@ function findNameColumns(
 function parseSheet(
   ws: XLSX.WorkSheet,
   sheetName: string,
+  /**
+   * Columns a person has confirmed the date for, keyed "Sheet:Column".
+   * A confirmed column stops being withheld and becomes an ordinary date column.
+   */
+  confirmedDateColumns: Record<string, string>,
   out: {
     employees: ParsedEmployeeRow[];
     records: RawAttendanceRecord[];
+    annotations: SheetAnnotation[];
     warnings: ParseWarning[];
   },
 ): SheetReport {
@@ -294,7 +301,23 @@ function parseSheet(
   const sheetYear = Number(dateColumns[0].iso.slice(0, 4));
   const sheetMonth = Number(dateColumns[0].iso.slice(5, 7)) - 1;
 
+  /**
+   * A column whose date somebody has confirmed is promoted to a real date
+   * column and its attendance imported. Until then it stays withheld - the
+   * importer proposes a reading, it does not adopt one.
+   */
+  const promoted: typeof brokenDateCols = [];
   for (const stray of brokenDateCols) {
+    const confirmed = confirmedDateColumns[`${sheetName}:${colLetter(stray.col)}`];
+    if (confirmed && stray.hasData) {
+      dateColumns.push({ col: stray.col, letter: colLetter(stray.col), iso: confirmed });
+      promoted.push(stray);
+    }
+  }
+  dateColumns.sort((a, b) => a.col - b.col);
+
+  for (const stray of brokenDateCols) {
+    if (promoted.includes(stray)) continue;
     const before =
       [...dateColumns].filter((d) => d.col < stray.col).pop()?.iso ?? null;
     const after = dateColumns.find((d) => d.col > stray.col)?.iso ?? null;
@@ -349,6 +372,24 @@ function parseSheet(
     );
     if (numericNotBinary.length > 0) {
       droppedRowCount++;
+
+      /**
+       * Keep any prose written on this row before discarding it. A totals row
+       * is not attendance, but somebody may have annotated a column on it -
+       * "Office closed" under 1 July, for instance - and that is evidence the
+       * import preview should put in front of a person.
+       */
+      for (const { dc, text } of nonEmpty) {
+        if (!/^-?\d+(\.\d+)?$/.test(text)) {
+          out.annotations.push({
+            sheetName,
+            rowNumber: row + 1,
+            date: dc.iso,
+            text,
+          });
+        }
+      }
+
       out.warnings.push({
         code: "NON_BINARY_NUMERIC_CELL",
         sheetName,
@@ -458,12 +499,17 @@ function isMonthSheet(name: string): boolean {
  * Sheets not named after a month are skipped and reported - the "Pdf" sheet in
  * the sample duplicates a week already covered by August.
  */
-export function parseWorkbook(buffer: ArrayBuffer | Buffer): WorkbookParseResult {
+export function parseWorkbook(
+  buffer: ArrayBuffer | Buffer,
+  options: { confirmedDateColumns?: Record<string, string> } = {},
+): WorkbookParseResult {
+  const confirmedDateColumns = options.confirmedDateColumns ?? {};
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: false });
 
   const out = {
     employees: [] as ParsedEmployeeRow[],
     records: [] as RawAttendanceRecord[],
+    annotations: [] as SheetAnnotation[],
     warnings: [] as ParseWarning[],
   };
   const sheets: SheetReport[] = [];
@@ -487,7 +533,9 @@ export function parseWorkbook(buffer: ArrayBuffer | Buffer): WorkbookParseResult
       });
       continue;
     }
-    sheets.push(parseSheet(wb.Sheets[sheetName], sheetName.trim(), out));
+    sheets.push(
+      parseSheet(wb.Sheets[sheetName], sheetName.trim(), confirmedDateColumns, out),
+    );
   }
 
   return { sheets, ...out };

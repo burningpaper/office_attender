@@ -64,6 +64,21 @@ export type RawAttendanceRecord = {
   rawValue: string;
 };
 
+/**
+ * A note written on a row the parser discards - typically the totals row.
+ *
+ * These are dropped as attendance but are not meaningless: the sample workbook
+ * has "Office closed" sitting on the totals row under 1 July, which is one of
+ * the two required days with company-wide zero attendance. That is somebody
+ * answering the exact question the importer would otherwise have to ask.
+ */
+export type SheetAnnotation = {
+  sheetName: string;
+  rowNumber: number;
+  date: string;
+  text: string;
+};
+
 export type SheetReport = {
   sheetName: string;
   isDataSheet: boolean;
@@ -81,5 +96,6 @@ export type WorkbookParseResult = {
   sheets: SheetReport[];
   employees: ParsedEmployeeRow[];
   records: RawAttendanceRecord[];
+  annotations: SheetAnnotation[];
   warnings: ParseWarning[];
 };

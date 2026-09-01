@@ -329,3 +329,64 @@ list of employees with illness and maternity records attached. Stage 8, and it m
 deployed before then.
 
 **Next:** Stage 7, the upload screen with its preview-and-approve gate.
+
+## 2026-09-01 — Stage 7: the gate, and what the sheet already knew
+
+Two dates have been nagging since stage 2. July 1st and 3rd are required days on which not
+one person in the company was marked present, and neither is a South African public
+holiday. Either the office was shut or nobody filled the sheet in — opposite verdicts, one
+excusing seventy-five people and the other condemning them, with nothing in the data to
+separate them.
+
+Except there was. Somebody had typed `"Office closed"` into the sheet, against 1 July, on
+the totals row. The parser had been discarding that row since stage 1 — correctly, because
+a row of column sums is not attendance — and throwing the annotation away with it. It now
+keeps any prose found on a discarded row, and the import preview puts it in front of you as
+evidence beside the question: *"The sheet has 'Office closed' written against this date on
+July row 59."*
+
+The 3rd has no such note. It is still asked about, still unanswered, and the report still
+counts it. That asymmetry is the right outcome: the system knows what the file says and
+does not extrapolate from it.
+
+### Nearly eleven questions instead of two
+
+The first run of anomaly detection raised eleven office-closure questions rather than two.
+Nine of them were September, where every required day has zero attendance for the dullest
+possible reason: the month has not happened yet. The sheet is laid out a month in advance,
+so on the 1st it is a full grid of zeroes.
+
+Two genuine questions buried in nine spurious ones is worse than no questions at all — it
+teaches you to click through the list without reading. Detection now ignores anything later
+than today.
+
+### A proposal you cannot act on is worse than no proposal
+
+The preview offered "Read the column as 2026-06-01 and import its attendance" for June's
+`O1 June` column, and clicking it did precisely nothing. The parser still withheld the
+column, because withholding is what it was told to do at parse time and the decision
+arrived afterwards.
+
+That is the worst kind of bug: the interface says something happened and nothing did. The
+workbook is now read a second time with the confirmed columns applied, but only when there
+is something to apply. Accepting that one column imports seventy records.
+
+### Speed
+
+The first end-to-end commit took nineteen seconds, almost all of it network latency —
+inserting employees, aliases, reasons and exemptions one row at a time meant around two
+hundred round trips to Neon. Batching them, and raising the attendance chunk from 500 to
+2,000 rows, took it to eleven. Preview is under three seconds.
+
+### The gate itself
+
+Nothing is written while a question raised by the importer is unanswered. The commit
+endpoint returns 409 rather than an error, because a refusal is a normal outcome — it means
+somebody still has to decide something, not that anything went wrong.
+
+The file is sent again for the commit rather than parked on the server between preview and
+approval. It is eighty kilobytes, and it means there is never a half-finished import
+sitting somewhere waiting to be forgotten.
+
+**Next:** Stage 8 — authentication, deploy, docs. Nothing goes online before the first of
+those.

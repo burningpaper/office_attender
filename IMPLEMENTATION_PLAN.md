@@ -198,7 +198,28 @@ Success Criteria:
 - Anomalies (proposed closures, unresolved names, low-confidence reasons) must be
   resolved before Approve enables.
 - Rejecting an upload leaves the database untouched.
-Status: Not Started
+Status: **Complete** — 13 new tests (164 total). Verified end to end in a browser with the
+real workbook.
+
+Notes from the build:
+- **The sheet already answered half the July mystery.** `"Office closed"` is written on the
+  *totals rows* — which the parser correctly discards as attendance — against 2026-07-01,
+  one of the two ambiguous zero-attendance required days. The parser now keeps prose found
+  on discarded rows and the preview shows it as evidence beside the question.
+- **September was about to be flagged as eleven office closures.** Every September required
+  day has zero attendance because the month has not happened. Anomaly detection now ignores
+  dates later than `asOf`, leaving exactly the two genuine July questions.
+- **A proposal that is offered must be honoured.** Accepting "Read the column as 2026-06-01"
+  originally did nothing — the parser still withheld it. The workbook is now re-read with
+  confirmed columns applied, and that column imports 70 records.
+- **Batched the writes.** Row-at-a-time meant ~200 network round trips to Neon and a 19s
+  commit. Batching employees, aliases, reasons and exemptions, and raising the chunk size
+  to 2,000, brought it to 11s. Preview is 2.9s.
+- Pre-existing stage 3 and 4 tests had to answer the new gate. They decline every proposal
+  via a shared `importDeclining` helper, which changes no data and keeps their assertions
+  about the file exactly as they were.
+- The file is re-sent for the commit rather than held server-side between preview and
+  approval — it is small, and it means no half-finished import sits anywhere.
 
 ## Stage 8: Auth, deploy, docs
 Goal: Behind authentication, on Vercel, documented.

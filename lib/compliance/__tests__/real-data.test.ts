@@ -7,8 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { freshDb } from "../../db/__tests__/helpers";
-import { importWorkbook } from "../../import/import-workbook";
+import { freshDb, importDeclining } from "../../db/__tests__/helpers";
 import { loadEmployeeRows } from "../load";
 import type { EmployeeRow } from "../types";
 
@@ -25,7 +24,7 @@ beforeAll(async () => {
     );
   }
   const ctx = await freshDb();
-  await importWorkbook(ctx.db, readFileSync(WORKBOOK), "data_example.xls.xlsx");
+  await importDeclining(ctx.db, readFileSync(WORKBOOK), "data_example.xls.xlsx");
   rowsAtSept1 = await loadEmployeeRows(ctx.db, "2026-09", "2026-09-01");
   rowsAtAug31 = await loadEmployeeRows(ctx.db, "2026-08", "2026-08-31");
 }, 120_000);
@@ -72,7 +71,7 @@ describe("exemptions on real data", () => {
 describe("public holidays on real data", () => {
   it("does not fail the whole company in April", async () => {
     const ctx = await freshDb();
-    await importWorkbook(ctx.db, readFileSync(WORKBOOK), "data_example.xls.xlsx");
+    await importDeclining(ctx.db, readFileSync(WORKBOOK), "data_example.xls.xlsx");
     const april = await loadEmployeeRows(ctx.db, "2026-04", "2026-04-30");
 
     // Good Friday (3 April) had zero attendance company-wide. It must not be a

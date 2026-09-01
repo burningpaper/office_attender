@@ -73,3 +73,26 @@ export async function expectPgError(
   }
   throw new Error(`Expected Postgres error ${code}, but the query succeeded.`);
 }
+
+/**
+ * Import a workbook, answering every blocking question with "leave it as it
+ * is".
+ *
+ * Stage 7 added a gate: nothing is written while a question the importer
+ * raised is unanswered. Tests that are about something else - identity
+ * resolution, compliance maths - still have to get past it, and declining
+ * every proposal is the option that changes no data.
+ */
+export async function importDeclining(
+  db: Parameters<typeof import("../../import/import-workbook").importWorkbook>[0],
+  buffer: Buffer,
+  filename: string,
+  asOf = "2026-09-01",
+) {
+  const { importWorkbook } = await import("../../import/import-workbook");
+  const preview = await importWorkbook(db, buffer, filename, { dryRun: true, asOf });
+  const resolutions = preview.anomalies
+    .filter((a) => a.blocking)
+    .map((a) => ({ id: a.id, accept: false }));
+  return importWorkbook(db, buffer, filename, { resolutions, asOf });
+}

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { ComplianceTable } from "./components/compliance-table";
 import { loadEmployeeRows } from "@/lib/compliance/load";
@@ -63,7 +64,15 @@ export default async function Page({
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
       <header className="mb-7">
-        <h1 className="text-xl font-semibold tracking-tight">Office attendance</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h1 className="text-xl font-semibold tracking-tight">Office attendance</h1>
+          <Link
+            href="/upload"
+            className="rounded border border-border-soft px-2.5 py-1.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-foreground"
+          >
+            Upload workbook
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-muted">
           {monthLabel} · Wednesdays and Fridays ·{" "}
           <span className="tabular">

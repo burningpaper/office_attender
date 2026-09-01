@@ -10,7 +10,7 @@ import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as s from "../../db/schema";
-import { freshDb } from "../../db/__tests__/helpers";
+import { freshDb, importDeclining } from "../../db/__tests__/helpers";
 import { importWorkbook } from "../import-workbook";
 
 const WORKBOOK = path.resolve(__dirname, "../../../data_example.xls.xlsx");
@@ -28,7 +28,8 @@ beforeAll(() => {
 
 async function importInto() {
   const ctx = await freshDb();
-  const report = await importWorkbook(ctx.db, buffer, "data_example.xls.xlsx");
+  // Declines every proposal, so these tests see the file exactly as parsed.
+  const report = await importDeclining(ctx.db, buffer, "data_example.xls.xlsx");
   return { ctx, report };
 }
 
@@ -196,7 +197,7 @@ describe("first import", () => {
 describe("re-import", () => {
   it("is a no-op that changes nothing", async () => {
     const ctx = await freshDb();
-    await importWorkbook(ctx.db, buffer, "data_example.xls.xlsx");
+    await importDeclining(ctx.db, buffer, "data_example.xls.xlsx");
 
     const snapshot = async () => ({
       employees: await ctx.db.select().from(s.employees).orderBy(s.employees.id),
@@ -209,7 +210,9 @@ describe("re-import", () => {
     });
 
     const before = await snapshot();
-    const second = await importWorkbook(ctx.db, buffer, "data_example.xls.xlsx");
+    const second = await importWorkbook(ctx.db, buffer, "data_example.xls.xlsx", {
+      asOf: "2026-09-01",
+    });
     const after = await snapshot();
 
     expect(second.alreadyImported).toBe(true);
@@ -227,6 +230,7 @@ describe("dry run", () => {
     const ctx = await freshDb();
     const report = await importWorkbook(ctx.db, buffer, "data_example.xls.xlsx", {
       dryRun: true,
+      asOf: "2026-09-01",
     });
 
     expect(report.committed).toBe(false);
