@@ -111,6 +111,25 @@ describe("the batch", () => {
     expect((init.headers as Record<string, string>)["x-office-attendance-secret"]).toBe("s3cret");
   });
 
+  it("reports the sender Microsoft names on a dry run", async () => {
+    // The sender is not configured anywhere - the credential is delegated, so
+    // the only honest source is Graph. Assuming it once bound the wrong mailbox.
+    stubFetch(() =>
+      new Response(
+        JSON.stringify({ ok: true, dryRun: true, wouldSendAs: "jarred.cinman@vml.com" }),
+        { status: 200 },
+      ),
+    );
+    const [outcome] = await sendBatch([message(1, "a@x.com")], { ...options, dryRun: true });
+    expect(outcome.sendAs).toBe("jarred.cinman@vml.com");
+  });
+
+  it("never sends a sender field - there is nothing to choose", async () => {
+    const calls = stubFetch(ok);
+    await sendBatch([message(1, "a@x.com")], options);
+    expect(calls[0]).not.toHaveProperty("sender");
+  });
+
   it("passes the dry run flag straight through", async () => {
     const calls = stubFetch(() =>
       new Response(JSON.stringify({ ok: true, dryRun: true }), { status: 200 }),

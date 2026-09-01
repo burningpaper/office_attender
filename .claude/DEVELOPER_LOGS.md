@@ -528,3 +528,38 @@ returns 403 is worse than no node. The dry run instead reports the configured se
 says plainly that it cannot be verified from here, and that a wrong one fails at send with
 `ErrorAccessDenied`. The emailer page shows the sender too, so it is visible before anyone
 types SEND rather than discoverable afterwards.
+
+## 2026-09-01 — The wrong mailbox
+
+A delegated credential existed after all, and switching to it exposed something worth
+writing down.
+
+n8n's public API refuses to list credentials on this instance — 403 — so there was no way
+to look up an ID. I referenced the credential by name instead, on the strength of an
+existing workflow that does the same thing, and tested it with a real send to an
+undeliverable address.
+
+The send succeeded. It also went from the wrong person. n8n had not matched the name at
+all; it silently bound a different credential of the same type and stored it as
+`Microsoft Graph - Matthew Arnold (Personal)`. No warning, no error, and the canvas looked
+correct. One message left Matthew Arnold's mailbox.
+
+Two things follow. A credential reference must be by ID, because a name that matches
+nothing does not fail — it substitutes. And an unverifiable configuration is a reason to
+stop and ask, not a reason to test with a live send. The whole point of building a dry-run
+path was to avoid exactly this, and I went around it.
+
+With the correct ID bound, the dry run reads the identity from Graph and reports
+`jarred.cinman@vml.com`. That check is now the only source of truth for the sender: the
+`OFFICE_ATTENDANCE_SENDER` setting is gone, along with the sender field in the payload,
+because with delegated auth there is no choice to express. Microsoft is asked, every dry
+run, and the answer is shown in the interface before anybody types SEND.
+
+The earlier reasoning about app-only credentials was correct for the credential I had at
+the time — `/me` returned "only valid with delegated authentication flow" and
+`GET /users/{id}` returned 403, which is exactly the shape of a Mail.Send-only app
+registration. It was simply the wrong credential for the job.
+
+**Unrelated, noticed in passing:** `VML - Bloodstream - Create Meeting Request` has an Azure
+client secret hardcoded in plaintext in its token node, readable by anyone with n8n API
+access. Flagged to the user; not ours to change.

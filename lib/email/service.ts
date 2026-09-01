@@ -37,6 +37,8 @@ export type SendResult = {
   dryRun: boolean;
   sent: number;
   failed: number;
+  /** The mailbox these went from, as reported by Microsoft on a dry run. */
+  sendAs?: string;
   outcomes: SendOutcome[];
 };
 
@@ -105,8 +107,6 @@ export async function sendCampaign(
     {
       webhookUrl,
       secret,
-      // App-only Graph credential: the mailbox must be named. See SendOptions.
-      sender: process.env.OFFICE_ATTENDANCE_SENDER,
       batchId,
       dryRun: input.dryRun,
     },
@@ -132,6 +132,7 @@ export async function sendCampaign(
     dryRun: input.dryRun,
     sent: outcomes.filter((o) => o.ok).length,
     failed: outcomes.filter((o) => !o.ok).length,
+    sendAs: outcomes.find((o) => o.sendAs)?.sendAs,
     outcomes,
   };
 }

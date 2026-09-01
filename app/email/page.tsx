@@ -84,11 +84,8 @@ export default async function EmailPage({
           Each message quotes only that person&rsquo;s own dates. Everything sent is recorded.
         </p>
         <p className="mt-1">
-          Sent from{" "}
-          <span className="tabular">
-            {process.env.OFFICE_ATTENDANCE_SENDER ?? "(no sender configured)"}
-          </span>
-          . Run a dry run to confirm before sending.
+          Messages go from whichever mailbox authorised the Microsoft credential in n8n.
+          A dry run asks Microsoft who that is and shows you, so it is never a guess.
         </p>
       </footer>
     </main>

@@ -1,6 +1,11 @@
 /**
  * Handing messages to the n8n workflow, one recipient per call.
  *
+ * There is no sender option. The n8n Microsoft Graph credential is delegated,
+ * so `/me/sendMail` goes from whoever authorised it and there is nothing here
+ * to choose. A dry run asks Graph who that is and reports it back, because the
+ * one time it was assumed rather than read, the wrong mailbox was used.
+ *
  * One call each rather than one call for the batch, because partial failure is
  * the normal case: an address bounces, a token expires halfway through. Per
  * recipient, the audit row records exactly what happened to that person.
@@ -16,6 +21,14 @@ export type SendOutcome = {
   email: string;
   ok: boolean;
   dryRun: boolean;
+  /**
+   * The mailbox this went from, as Microsoft reports it on a dry run.
+   *
+   * Not configured anywhere: the n8n credential is delegated, so the sender is
+   * whoever authorised it, and the only honest way to know is to ask Graph.
+   * Guessing it once bound the wrong person's mailbox without complaint.
+   */
+  sendAs?: string;
   error?: string;
 };
 
@@ -29,17 +42,6 @@ export type SendMessage = {
 export type SendOptions = {
   webhookUrl: string;
   secret: string;
-  /**
-   * The mailbox to send from.
-   *
-   * Required, and not cosmetic. The n8n Graph credential is app-only (client
-   * credentials), not delegated - Graph answers `/me` on it with "only valid
-   * with delegated authentication flow". An app-only token has no "me", so the
-   * mailbox must be named, and the app registration must be permitted to send
-   * as it. A mailbox it is not permitted for fails at send with
-   * ErrorAccessDenied.
-   */
-  sender?: string;
   batchId: string;
   dryRun: boolean;
   /** Kept low: this is somebody's mail server, not a load test. */
@@ -68,13 +70,12 @@ async function sendOne(
         html: message.html,
         employeeId: message.employeeId,
         batchId: options.batchId,
-        sender: options.sender,
         dryRun: options.dryRun,
       }),
     });
 
     const text = await response.text();
-    let payload: { ok?: boolean; error?: string } = {};
+    let payload: { ok?: boolean; error?: string; wouldSendAs?: string } = {};
     try {
       payload = text ? JSON.parse(text) : {};
     } catch {
@@ -103,6 +104,7 @@ async function sendOne(
       email: message.to,
       ok: true,
       dryRun: options.dryRun,
+      ...(payload.wouldSendAs ? { sendAs: payload.wouldSendAs } : {}),
     };
   } catch (error) {
     return {

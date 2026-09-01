@@ -352,6 +352,11 @@ function Result({ result }: { result: SendResult }) {
         {result.sent} succeeded, {result.failed} failed.
         {result.dryRun && " Nothing was sent."}
       </p>
+      {result.sendAs && (
+        <p className="mt-1 text-xs text-muted">
+          Sending as <span className="tabular">{result.sendAs}</span>, according to Microsoft.
+        </p>
+      )}
       {failures.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1">
           {failures.map((f) => (
