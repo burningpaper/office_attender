@@ -20,6 +20,7 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { buildCalendar } from "../calendar/build-calendar";
 import * as s from "../db/schema";
 import { classifyCell } from "./classify-cell";
+import { deriveExemption } from "./derive-exemptions";
 import { parseWorkbook } from "./parse-workbook";
 import { resolveIdentities, type ResolvedIdentity } from "./resolve-identities";
 import type { ParseWarning } from "./types";
@@ -48,6 +49,7 @@ export type ImportReport = {
     explained: number;
   };
   reasons: { distinct: number; created: number };
+  exemptions: { created: number; needingReview: { name: string; note: string; reason: string }[] };
   warnings: ParseWarning[];
   committed: boolean;
 };
@@ -104,6 +106,7 @@ export async function importWorkbook(
       identities: { total: 0, matchedExisting: 0, created: 0, bySimilarity: [], needingReview: [] },
       attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0 },
       reasons: { distinct: 0, created: 0 },
+      exemptions: { created: 0, needingReview: [] },
       warnings: [],
       committed: false,
     };
@@ -156,6 +159,7 @@ export async function importWorkbook(
     },
     attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0 },
     reasons: { distinct: distinctReasons.length, created: 0 },
+    exemptions: { created: 0, needingReview: [] },
     warnings: parsed.warnings,
     committed: false,
   };
@@ -227,6 +231,49 @@ export async function importWorkbook(
       .insert(s.employeeAliases)
       .values({ rawName: identity.rawName, employeeId, sourceUploadId: upload.id })
       .onConflictDoNothing();
+  }
+
+  /**
+   * Exemptions from the standing-note column. Only notes that clearly excuse
+   * the required days become active exemptions - a work-from-home approval
+   * naming Thursday is recorded but does not exempt anyone, because Thursday is
+   * not a day anyone is required in.
+   */
+  const notesByRawName = new Map<string, string>();
+  for (const row of parsed.employees) {
+    if (row.standingNote) notesByRawName.set(row.rawName, row.standingNote);
+  }
+
+  for (const [rawName, note] of notesByRawName) {
+    const employeeId = idByRawName.get(rawName);
+    if (employeeId === undefined) continue;
+
+    const derived = deriveExemption(note);
+    if (!derived) continue;
+
+    const existing = await db
+      .select()
+      .from(s.exemptions)
+      .where(and(eq(s.exemptions.employeeId, employeeId), eq(s.exemptions.rawText, derived.rawText)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(s.exemptions).values({
+        employeeId,
+        type: derived.type,
+        rawText: derived.rawText,
+        active: derived.exempts,
+      });
+      report.exemptions.created++;
+    }
+
+    if (derived.reviewReason) {
+      report.exemptions.needingReview.push({
+        name: rawName,
+        note: derived.rawText,
+        reason: derived.reviewReason,
+      });
+    }
   }
 
   // Reasons: one row per distinct string, categorised as UNKNOWN until stage 5.

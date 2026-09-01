@@ -177,3 +177,51 @@ three separate rows covering 96 cells between them. One concept, three spellings
 amount of string normalisation will also fold in `booked off` and `Off Sick`.
 
 **Next:** Stage 4, the compliance engine.
+
+## 2026-09-01 — Stage 4: the compliance engine
+
+The engine is pure functions over plain data, with `asOf` always passed in and never read
+from the clock. That one decision makes every verdict reproducible and lets the tests stand
+on a chosen day and look around — which is how the September case became provable rather
+than a thing we believed.
+
+And it is provable now. On 1 September, with 1,474 September cells in the database and not
+one attendance among them, the report shows seventy-five dashes and zero accusations. The
+original rule would have shown seventy-five reds, every month, on the first.
+
+### The bug hiding in "complete month"
+
+Long-term compliance averages over the complete months a person has worked, so something
+has to decide what "complete" means. The obvious answer — they were here from the 1st to
+the 31st — is wrong, and the real data proves it: 1 March 2026 is a Sunday, so the earliest
+anyone can appear is Monday the 2nd. Everybody looked like a mid-month joiner, and March
+silently vanished from all seventy-five long-term averages.
+
+The fix is to measure completeness against the month's first and last *required* days
+rather than its calendar edges. Someone present from before the first day that counts,
+until after the last, worked a complete month. May has the same shape at the other end: its
+final required day is the 29th, because the 30th and 31st are a weekend.
+
+### Two things the engine now says out loud
+
+An explained absence leaves the denominator, so `4/5 (+3ex)` is a real row in the August
+report — Carlos Feyder was required on eight days, excused on three, and judged on five.
+Showing the excused count matters: without it, a clean-looking `1/1` hides three sick days,
+and a suspiciously light month looks like a good one.
+
+`Approved to work from home every Thursday` does not exempt anybody. Thursday is not a
+required day, so the note says nothing whatsoever about Wednesday and Friday attendance.
+It is recorded, and surfaced for confirmation, but it does not remove Lorna Downs from the
+report. The other seven standing notes — four remote locations and a maternity leave — do.
+
+### A finding worth arguing about
+
+Two people out of seventy-five meet the long-term rule. The arithmetic is correct; the
+target is simply far above what this office actually does. Roughly 2.5 office days per
+person per month against a target of six. A column that reads NO for 88% of the company is
+not information, it is wallpaper, and people learn to scroll past it. Flagged in the plan
+for a decision rather than quietly adjusted — the rule came from the spec, and changing it
+is not ours to do.
+
+**Next:** Stage 5, reason normalisation, where `On leave` / `On Leave` / `on leave` finally
+become one thing.

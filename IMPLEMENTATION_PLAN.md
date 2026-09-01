@@ -93,7 +93,41 @@ Success Criteria:
 - Kevin Irwin (7 months of zeroes, lives in George) resolves to `EXEMPT`.
 - Excused-neutral policy verified: a required day with any recorded reason leaves the
   denominator; someone present 1/1 with 3 sick days reads `YES 1/1 · 3 excused`, not `NO`.
-Status: Not Started
+Status: **Complete** — 43 new tests (126 total). All four success criteria verified against
+the real 82-person dataset, not just fixtures.
+
+Notes from the build:
+- **Real bug: "complete month" was measured against the calendar month.** 1 March 2026 is a
+  Sunday, so someone whose record starts Monday the 2nd looked like a mid-month joiner and
+  lost the month from their long-term average. Now measured against the month's first and
+  last *required* days. The real data has this shape at both ends (March starts the 2nd,
+  May's last required day is the 29th).
+- Exemption derivation was missing from stage 3 and is now wired in: 8 derived from
+  standing notes, 7 of them active.
+- **`Approved to work from home every Thursday` deliberately does NOT exempt.** Thursday is
+  not a required day, so it says nothing about Wednesday and Friday. Recorded and surfaced
+  for confirmation instead.
+- `asOf` is always passed in, never read from the clock, so every verdict is reproducible.
+- **The long-term rule is very hard to meet on this data** — see the note below.
+
+### Finding for discussion: the long-term rule may be unusable as specified
+
+Running the engine over August 2026 gives:
+
+```
+monthly:   YES 12 · NO 50 · NA 13 · EXEMPT 7
+two week:  YES 34 · NO 27 · NA 14 · EXEMPT 7
+long term: YES  2 · NO 66 · NA  7 · EXEMPT 7
+```
+
+Two people out of 75 meet "an average of 3 Wednesdays and 3 Fridays per month". That is not
+a bug — the arithmetic is right — but a column that reads NO for 88% of the company carries
+almost no information, and everyone learns to ignore it.
+
+The cause is that the target is far above actual behaviour: 1,443 attendances across 82
+people over 7 months is about 2.5 office days per person per month, against a target of 6.
+Worth deciding whether the rule is aspirational (keep it, expect red) or diagnostic (lower
+the target, or measure against the team median). Raised, not resolved.
 
 ## Stage 5: AI reason normalisation
 Goal: The ~65 distinct reason strings classified into the controlled vocabulary, cached.

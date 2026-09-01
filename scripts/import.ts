@@ -36,6 +36,14 @@ async function main() {
   console.log(`  attendance   ${report.attendance.inserted} new, ${report.attendance.changed} changed, ${report.attendance.unchanged} unchanged`);
   console.log(`  explained    ${report.attendance.explained} absences with a reason`);
   console.log(`  reasons      ${report.reasons.distinct} distinct strings`);
+  console.log(`  exemptions   ${report.exemptions.created} derived from standing notes`);
+
+  if (report.exemptions.needingReview.length) {
+    console.log(`\n  Exemptions to confirm (${report.exemptions.needingReview.length}):`);
+    for (const e of report.exemptions.needingReview) {
+      console.log(`    • ${e.name} — ${e.reason}`);
+    }
+  }
 
   if (report.identities.needingReview.length) {
     console.log(`\n  Needs review (${report.identities.needingReview.length}):`);
