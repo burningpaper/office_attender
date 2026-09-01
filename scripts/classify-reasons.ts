@@ -44,7 +44,21 @@ async function main() {
     process.exit(1);
   }
 
-  const report = await syncReasonClassifications(db, createAnthropicClassifier());
+  try {
+    var report = await syncReasonClassifications(db, createAnthropicClassifier());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/anthropic-workspace-id/i.test(message)) {
+      console.error(
+        "This API key is identity-linked, so it must name the workspace it acts in.\n\n" +
+          "Add to .env.local:\n  ANTHROPIC_WORKSPACE_ID=wrkspc_...\n\n" +
+          "Find it in the Anthropic Console under Settings → Workspaces (the id in\n" +
+          "the workspace's URL). Then re-run this command.",
+      );
+      process.exit(1);
+    }
+    throw error;
+  }
 
   if (report.noCallMade) {
     console.log(`Nothing to classify — all ${report.skipped} strings are already settled.`);

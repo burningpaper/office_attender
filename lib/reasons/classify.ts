@@ -89,10 +89,25 @@ export function buildUserPrompt(texts: string[]): string {
 }
 
 /**
+ * Builds the SDK client.
+ *
+ * An identity-linked API key must name the workspace it acts in - without the
+ * `anthropic-workspace-id` header every endpoint returns a 400, including
+ * `/v1/models`. Ordinary keys ignore the header, so setting it when present is
+ * safe either way.
+ */
+export function createClient(): Anthropic {
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+  return new Anthropic(
+    workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {},
+  );
+}
+
+/**
  * The real classifier. Batches every string into one request - 35 notes is a
  * few thousand tokens, so splitting them would cost more than it saved.
  */
-export function createAnthropicClassifier(client = new Anthropic()): Classifier {
+export function createAnthropicClassifier(client = createClient()): Classifier {
   return {
     async classify(texts) {
       if (texts.length === 0) return [];
