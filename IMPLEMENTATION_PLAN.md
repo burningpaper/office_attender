@@ -11,7 +11,21 @@ Success Criteria:
   while KEEPING June's `Weslee Johannesen` row, which sits below the gap but has real data.
 - Snapshot test asserts exact counts per sheet; re-running on the same file is byte-identical.
 - Flags, without crashing: `O1 June`, `10 Aug`, numeric-not-0/1 cells, duplicate names.
-Status: Not Started
+Status: **Complete** — 19 tests passing, typecheck and lint clean.
+
+Notes from the build (things the sample data taught us):
+- Attendance is stored as **Excel booleans** (`t:"b"`), not the numbers the grid
+  displays. Normalised to `"1"`/`"0"` at the parser boundary.
+- There are **nine** totals rows, not one — every sheet has one and several have two.
+  All are nameless, which is what makes them safe to drop.
+- A column's *header* cannot identify an attendance column; its *contents* can.
+  Classification is by 0/1 density, which also stopped June's broken `O1 June` column
+  being swallowed into the standing-note field.
+- `YONDER` is a division divider row present on all seven sheets; dropped as no-data.
+- August's `10 Aug` column is **empty below the header** — a day the sheet meant to
+  capture and never did. Flagged distinctly from June's, which does hold withheld data.
+- `Weslee Johannesen` carries the full name in the first-name column with the surname
+  column blank, so it joins `Brian` and `Intern` as unresolved identities for Stage 3.
 
 ## Stage 2: Schema + migrations
 Goal: Neon Postgres schema from DESIGN.md §4 in Drizzle, with the SA public holiday calendar
