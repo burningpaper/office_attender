@@ -120,3 +120,60 @@ data genuinely cannot distinguish "the office was shut" from "nobody filled the 
 so when a human rules on it, that ruling has to outlive the next seed.
 
 **Next:** Stage 3, identity resolution and the first real import.
+
+## 2026-09-01 — Stage 3: identity resolution and the first real import
+
+Eighty-four name strings went in. Eighty-two people came out. The two that collapsed were
+`Zakiya`/`Zakiyya Karim` and `Zoe`/`zoe Flanegan`, and neither needed a model to work out —
+one is a case difference, the other a single transposed letter.
+
+The rule that does it is deliberately timid. Two names match only if they have the same
+number of parts, share at least one part exactly, sit within an edit distance of two, and
+are long enough that two edits are a typo rather than a difference. Every clause is there
+because of something real in this roster: `Anthea O'Neill'` and `Ashley O'Neill'` are two
+people who share a surname and a stray apostrophe; `Jason Tucker` and `Jason Khubeka` share
+a first name; `Matthew Rudd` must not absorb `Matthew van Niekerk`. A looser rule silently
+combines two employees' attendance into one record, and nobody would ever notice.
+
+Names with no surname never match anything. `Brian` and `Intern` are created as people and
+flagged for a human, because there is nothing there to be confident about.
+
+### The bug the integration test caught
+
+The unit tests all passed. The integration test — the real workbook, through the whole
+pipeline, into a real Postgres — did not, and the reason was worth the whole exercise.
+
+Similarity matching compared each new name against known employees *and* against people
+created earlier in the same run. The trouble is that a person created earlier in the same
+run has no database id yet, so the match succeeded, returned `employeeId: undefined`, and
+the importer cheerfully created a second employee. `Zakiyya Karim` matched `Zakiya Karim`,
+was reported as matched, and became a separate row anyway. Eighty-three employees instead
+of eighty-two.
+
+The fix is a canonical key: every resolution now carries the normalised key of the person
+it belongs to, whether or not that person exists in the database yet, and the importer
+creates one employee per distinct key. Grouping before writing rather than after.
+
+### Corrections to earlier claims
+
+The design said roughly 65 distinct reason strings. It is 35. The earlier figure came from
+scanning non-binary cell values before the parser knew how to spot a totals row, so the
+numbers `5`, `22`, `36` and friends were being counted as absence reasons. The cost
+argument in §6 only gets stronger.
+
+Also: `Jason Khubeka` never becomes an employee at all. Both his appearances are legend
+rows below the blank gap with no attendance data, so the parser drops him — correct
+behaviour, but surprising if you go looking for him.
+
+### What the data now says
+
+Seven months, 10,453 attendance rows, 1,443 of them present. And September: 1,474 cells,
+zero present. That is the current-month problem from the design sitting in the database in
+plain sight — the month is laid out and hasn't happened. Stage 4's first job is to not read
+that as seventy-five people failing.
+
+The other thing visible now is why stage 5 exists. `On leave`, `On Leave` and `on leave` are
+three separate rows covering 96 cells between them. One concept, three spellings, and no
+amount of string normalisation will also fold in `booked off` and `Off Sick`.
+
+**Next:** Stage 4, the compliance engine.

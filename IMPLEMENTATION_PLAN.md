@@ -64,7 +64,24 @@ Success Criteria:
 - `Brian` and `Intern` are surfaced as unresolved, not silently merged or dropped.
 - `first_seen`/`last_seen` computed per employee.
 - Re-importing the same file is a no-op (sha256 dedupe) and changes zero rows.
-Status: Not Started
+Status: **Complete** — 38 new tests (83 total). Seven months imported into Neon:
+82 employees, 84 aliases, 10,453 attendance rows, 35 distinct reasons.
+
+Notes from the build:
+- **Real bug caught by the integration test.** A similarity match landing on someone
+  created earlier in the *same run* found a candidate with no database id yet, so
+  `Zakiyya Karim` silently became a second employee. Fixed with a `canonicalKey` that
+  groups spellings before any row is written.
+- **35 distinct reason strings, not ~65.** The earlier estimate counted the totals rows'
+  numbers as reasons. DESIGN.md corrected. The cost argument is unchanged and stronger.
+- `Jason Khubeka` never becomes an employee — both his rows are legend rows with no
+  attendance data, so the parser drops him. Correct, but worth knowing.
+- Kevin Irwin appears on **all seven** sheets with zeroes throughout; his window is
+  2026-03-02 → 2026-09-30. An exemption question, not an attendance one.
+- **September is 1,474 cells and zero present** — the current-month problem from
+  DESIGN.md §2.1, now visible in real data. Stage 4 must not read this as mass failure.
+- `On leave` / `On Leave` / `on leave` are three separate reason rows covering 96 cells.
+  Exactly what stage 5 collapses.
 
 ## Stage 4: Compliance engine
 Goal: Pure functions implementing DESIGN.md §7, fully unit tested. No UI.

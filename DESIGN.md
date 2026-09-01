@@ -27,7 +27,7 @@ crosses, not "Y". Out of roughly 10,000 attendance cells across seven months, ex
 
 | Where | What it looks like | Volume |
 |---|---|---|
-| Free-text absence reasons written *in place of* the 0/1 | `On leave`, `on leave `, `On Leave`, `Sick`, `BOOKED OFF SICK`, `son at ER`, `Plumbing situation`, `Affected by storm`, `"Office closed"` | ~290 cells, **~65 distinct strings** |
+| Free-text absence reasons written *in place of* the 0/1 | `On leave`, `on leave `, `On Leave`, `Sick`, `BOOKED OFF SICK`, `son at ER`, `Plumbing situation`, `Affected by storm`, `"Office closed"` | 232 cells, **35 distinct strings** |
 | Employee names | `Zakiya Karim` vs `Zakiyya Karim`; `Weslee Johannesen` vs `Weslee Johanneson`; `zoe Flanegan` vs `Zoe Flanegan`; `Brian` and `Intern` with no surname at all | 88 distinct name strings for ~75 real people |
 | Sheet furniture | blank spacer columns between week blocks (`I`, `O`, `U`, `AA` — and they *move* every month); a totals row (`6, 5, 3, 1, 7, 7`); trailing legend rows (`Richard Shelton`, `Weslee Johannesen`) sitting below a blank gap; stray header labels like `O1 June` and `10 Aug` where a date serial should be | every sheet |
 
@@ -44,7 +44,7 @@ report someone might act on.
 **Deterministic parser first; AI only where the data is genuinely linguistic.** Two narrow,
 cacheable jobs:
 
-1. **Reason normalisation** — map ~65 distinct free-text strings onto a controlled
+1. **Reason normalisation** — map 35 distinct free-text strings onto a controlled
    vocabulary (`SICK`, `ANNUAL_LEAVE`, `FAMILY_RESPONSIBILITY`, `TRAVEL_OTHER_OFFICE`,
    `WFH_APPROVED`, `PUBLIC_HOLIDAY_OR_CLOSURE`, `PERSONAL_EMERGENCY`, `UNKNOWN`), each with
    a `counts_as` verdict.
@@ -54,6 +54,10 @@ cacheable jobs:
 Both are keyed by the raw string and cached in the database, so the model is called once
 per novel string, ever. In steady state a monthly upload makes **zero to three** model
 calls. See §6.
+
+*(Measured during stage 3: 35 distinct reason strings across 232 cells. An earlier estimate
+of ~65 was inflated — it counted the numbers in the sheets' totals rows, which turned out to
+be furniture rather than data.)*
 
 ---
 
@@ -277,7 +281,7 @@ validated against the reason vocabulary rather than parsed out of prose. **Promp
 on the system prompt + vocabulary definitions (stable prefix), with the batch of novel
 strings after the last cache breakpoint.
 
-**Cost, honestly:** the entire seven-month backlog is ~65 distinct strings — one request,
+**Cost, honestly:** the entire seven-month backlog is 35 distinct strings — one request,
 a few thousand tokens, well under a cent. Steady state is one or two new strings a month.
 This is a rounding error, which is exactly why the cheaper-model question isn't worth
 asking; correctness on the categorisation is worth more than the fractions of a cent.
