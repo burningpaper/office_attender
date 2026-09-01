@@ -51,6 +51,8 @@ export type ParsedEmployeeRow = {
   rawName: string;
   /** The standing note from the column between the names and the dates. */
   standingNote: string | null;
+  /** Work email, when the sheet carries an email column. */
+  email: string | null;
 };
 
 /** One cell: this person, this date, whatever the cell actually held. */

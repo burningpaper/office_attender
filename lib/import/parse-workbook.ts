@@ -164,15 +164,31 @@ function findNameColumns(
   const lastCol: number = lastNameCol ?? firstCol + 1;
 
   /**
-   * The standing-note column is whatever sits between the surname and the first
-   * date. Deliberately positional rather than looking for a "Comment" header:
-   * from July onward that header is blank while the column still holds notes
-   * like "From Hermanus".
+   * Everything between the surname and the first date is either a standing note
+   * or an email address, and the two must not be confused: from August 2026 the
+   * workbook repurposed that column for addresses, inserting it before the
+   * dates. Reading 65 addresses as standing notes would have produced 65
+   * spurious exemption warnings on every upload.
+   *
+   * Classification is by header where there is one, and by content where there
+   * is not - an address column is full of "@" and a note column never is. The
+   * same content-over-header principle that sorted out the date columns.
    */
   const noteCols: number[] = [];
-  for (let col = lastCol + 1; col < firstDateCol; col++) noteCols.push(col);
+  const emailCols: number[] = [];
 
-  return { firstNameCol: firstCol, lastNameCol: lastCol, noteCols };
+  for (let col = lastCol + 1; col < firstDateCol; col++) {
+    const header = cellText(cellAt(ws, headerRow, col)).toLowerCase();
+    let atCount = 0;
+    for (let row = headerRow + 1; row <= range.e.r; row++) {
+      if (cellText(cellAt(ws, row, col)).includes("@")) atCount++;
+    }
+
+    if (/e-?mail|address/.test(header) || atCount >= 3) emailCols.push(col);
+    else noteCols.push(col);
+  }
+
+  return { firstNameCol: firstCol, lastNameCol: lastCol, noteCols, emailCols };
 }
 
 function parseSheet(
@@ -297,6 +313,7 @@ function parseSheet(
   const names = findNameColumns(ws, range, headerRow, firstDateCol);
   const { firstNameCol, lastNameCol } = names;
   const noteCols = names.noteCols.filter((c) => !brokenCols.has(c));
+  const emailCols = names.emailCols.filter((c) => !brokenCols.has(c));
 
   const sheetYear = Number(dateColumns[0].iso.slice(0, 4));
   const sheetMonth = Number(dateColumns[0].iso.slice(5, 7)) - 1;
@@ -437,6 +454,13 @@ function parseSheet(
       .filter((t) => t !== "");
     const standingNote = noteParts.length > 0 ? tidy(noteParts.join(" ")) : null;
 
+    const email =
+      emailCols
+        .map((col) => cellText(cellAt(ws, row, col)))
+        .find((t) => t.includes("@"))
+        ?.trim()
+        .toLowerCase() ?? null;
+
     out.employees.push({
       sheetName,
       rowNumber: row + 1,
@@ -444,6 +468,7 @@ function parseSheet(
       lastName: last,
       rawName,
       standingNote,
+      email,
     });
     employeeRowCount++;
 

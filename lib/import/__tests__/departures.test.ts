@@ -152,3 +152,56 @@ describe("what leaving changes", () => {
     expect(recipients).toHaveLength(0);
   }, 180_000);
 });
+
+describe("email addresses carried in the workbook", () => {
+  const WITH_EMAILS = path.resolve(__dirname, "../../../data_example2.xlsx");
+
+  it("reads an Email column without mistaking it for a standing note", async () => {
+    // From August 2026 the workbook inserted an "Email" column in the same
+    // position the standing notes had occupied, shifting every date right by
+    // one. Reading those addresses as notes would have produced 65 spurious
+    // exemption warnings on every upload.
+    if (!existsSync(WITH_EMAILS)) return;
+
+    const { parseWorkbook } = await import("../parse-workbook");
+    const parsed = parseWorkbook(readFileSync(WITH_EMAILS));
+
+    const withEmail = new Set(parsed.employees.filter((e) => e.email).map((e) => e.rawName));
+    expect(withEmail.size).toBe(65);
+
+    const notes = [...new Set(parsed.employees.map((e) => e.standingNote).filter(Boolean))];
+    expect(notes.some((n) => n!.includes("@"))).toBe(false);
+    expect(notes).toContain("Stays in George");
+  });
+
+  it("still finds the dates after the inserted column shifted them", async () => {
+    if (!existsSync(WITH_EMAILS)) return;
+    const { parseWorkbook } = await import("../parse-workbook");
+    const parsed = parseWorkbook(readFileSync(WITH_EMAILS));
+
+    const august = parsed.sheets.find((s) => s.sheetName === "August")!;
+    expect(august.dateRange).toEqual({ start: "2026-08-03", end: "2026-08-31" });
+  });
+
+  it("saves the addresses onto the right people", async () => {
+    if (!existsSync(WITH_EMAILS)) return;
+    const ctx = await freshDb();
+    await seedCalendar(ctx.db, 2026, 2026);
+    const report = await importDeclining(ctx.db, readFileSync(WITH_EMAILS), "with-emails.xlsx");
+
+    expect(report.addresses.imported).toBe(65);
+
+    const [kevin] = await ctx.db
+      .select()
+      .from(s.employees)
+      .where(eq(s.employees.displayName, "Kevin Irwin"));
+    expect(kevin.email).toBe("kevin.irwin@es.wpp.com");
+
+    // Everyone still on the sheet who has an address, has it.
+    const active = await ctx.db
+      .select()
+      .from(s.employees)
+      .where(eq(s.employees.status, "ACTIVE"));
+    expect(active.filter((e) => e.email)).toHaveLength(65);
+  }, 300_000);
+});

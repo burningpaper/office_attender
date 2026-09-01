@@ -35,6 +35,7 @@ export type ImportReport = {
   alreadyImported: boolean;
   uploadId?: number;
   dateRange: { start: string; end: string } | null;
+  addresses: { imported: number; changed: number };
   people: {
     /** Marked as having left, because they are not on the newest sheet. */
     departed: { displayName: string; lastSeenDate: string | null }[];
@@ -117,6 +118,7 @@ export async function importWorkbook(
       dateRange: existing[0].dateRangeStart
         ? { start: existing[0].dateRangeStart, end: existing[0].dateRangeEnd! }
         : null,
+      addresses: { imported: 0, changed: 0 },
       people: { departed: [], returned: [] },
       identities: { total: 0, matchedExisting: 0, created: 0, bySimilarity: [], needingReview: [] },
       attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0 },
@@ -208,6 +210,7 @@ export async function importWorkbook(
     filename,
     alreadyImported: false,
     dateRange,
+    addresses: { imported: 0, changed: 0 },
     people: { departed: [], returned: [] },
     identities: {
       total: identities.length,
@@ -580,6 +583,53 @@ export async function importWorkbook(
     ) w
     where w.employee_id = e.id
   `);
+
+  /**
+   * Email addresses, when the workbook carries them.
+   *
+   * The newest sheet wins: an address is a current fact, and an older tab
+   * repeating a stale one should not overwrite a newer correction.
+   */
+  const emailByRawName = new Map<string, string>();
+  const sheetOrder = new Map(
+    finalParse.sheets
+      .filter((sheet) => sheet.isDataSheet && sheet.dateRange)
+      .sort((a, b) => a.dateRange!.end.localeCompare(b.dateRange!.end))
+      .map((sheet, index) => [sheet.sheetName, index]),
+  );
+  const seenAt = new Map<string, number>();
+
+  for (const row of finalParse.employees) {
+    if (!row.email) continue;
+    const order = sheetOrder.get(row.sheetName) ?? -1;
+    if ((seenAt.get(row.rawName) ?? -1) > order) continue;
+    seenAt.set(row.rawName, order);
+    emailByRawName.set(row.rawName, row.email);
+  }
+
+  if (emailByRawName.size > 0) {
+    const current = await db
+      .select({ id: s.employees.id, email: s.employees.email })
+      .from(s.employees);
+    const currentById = new Map(current.map((e) => [e.id, e.email]));
+
+    const wanted = new Map<number, string>();
+    for (const [rawName, email] of emailByRawName) {
+      const employeeId = idByRawName.get(rawName);
+      if (employeeId !== undefined) wanted.set(employeeId, email);
+    }
+
+    for (const [employeeId, email] of wanted) {
+      const existing = currentById.get(employeeId) ?? null;
+      if (existing === email) continue;
+      await db
+        .update(s.employees)
+        .set({ email, updatedAt: new Date() })
+        .where(eq(s.employees.id, employeeId));
+      if (existing) report.addresses.changed++;
+      else report.addresses.imported++;
+    }
+  }
 
   /**
    * Who has left.

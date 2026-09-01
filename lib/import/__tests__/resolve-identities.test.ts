@@ -9,6 +9,7 @@ const row = (firstName: string, lastName = ""): ParsedEmployeeRow => ({
   lastName,
   rawName: `${firstName} ${lastName}`.trim(),
   standingNote: null,
+  email: null,
 });
 
 describe("resolveIdentities", () => {
