@@ -72,3 +72,51 @@ never "below the gap". There's a test named after it.
 
 **Next:** Stage 2, the Neon Postgres schema, with the SA public holiday calendar seeded so
 April and May stop reading as company-wide failure.
+
+## 2026-09-01 — Stage 2: the schema, and a solved mystery
+
+Stage 1 left a loose end. The August sheet had a column headed `10 Aug` with absolutely
+nothing under it, and the parser flagged it as "a day the sheet meant to capture and never
+did" — accurate, but not an explanation.
+
+The calendar explains it. National Women's Day is 9 August, and in 2026 that falls on a
+Sunday. The Public Holidays Act moves such a holiday to the following Monday, so 10 August
+2026 is a public holiday. The column exists because whoever laid the month out worked from
+a template; it is empty because the office was closed. Nobody typed anything because there
+was nothing to type.
+
+That is the whole argument for this table in one example. Without a calendar the system
+reads an empty column as mass absence, and the same thing happens at much larger scale in
+April and May, where Good Friday and Workers' Day both land on Fridays and show zero
+attendance across all ~75 employees. Naively that is the entire company failing twice a
+year.
+
+Holidays are computed rather than listed — Easter via the anonymous Gregorian computus,
+the ten fixed dates from the Act, then the Sunday rule applied over the top. It means the
+2027 calendar needs no one to remember anything. It also surfaced a wrinkle worth knowing:
+December 2026 has only seven required days, because 16 December is a Wednesday and
+Christmas Day a Friday. That is precisely the month where "an average of three Wednesdays
+and three Fridays" becomes arithmetically awkward, which is the caveat already flagged in
+the design.
+
+### Constraints that actually bite
+
+`attendance.date` carries a foreign key to `calendar_days`. That sounds fussy until you
+consider the alternative: attendance rows sitting on dates the compliance engine has never
+heard of, quietly excluded from every denominator, discovered months later when a month
+reads oddly. The FK turns calendar coverage into a hard precondition of import.
+
+The tests run against PGlite — real Postgres compiled to WASM — so a unique violation is a
+genuine unique violation rather than a mock agreeing with itself. That mattered
+immediately: the first run showed six constraint tests "failing" while the constraints
+were in fact working perfectly. Drizzle wraps driver errors in a `Failed query: ...`
+Error, so matching on the message tested the wrapper, not the database. Asserting on the
+SQLSTATE code instead (`23505`, `23503`, `22P02`) is both correct and more precise about
+what is being claimed.
+
+One deliberate piece of restraint: re-seeding never overwrites a day someone has confirmed.
+The importer can only ever *propose* that a zero-attendance day was an office closure — the
+data genuinely cannot distinguish "the office was shut" from "nobody filled the sheet in" —
+so when a human rules on it, that ruling has to outlive the next seed.
+
+**Next:** Stage 3, identity resolution and the first real import.

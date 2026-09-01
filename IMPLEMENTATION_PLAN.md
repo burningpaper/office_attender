@@ -35,7 +35,26 @@ Success Criteria:
 - `calendar_days` correctly marks 2026-04-03 and 2026-05-01 as `PUBLIC_HOLIDAY`, and
   `is_required_day` is false for them.
 - Constraint test: duplicate `(employee_id, date)` is rejected.
-Status: Not Started
+Status: **Complete** — 26 new tests (45 total), migration applied to Neon, calendar seeded
+2025–2027.
+
+Notes from the build:
+- **The `10 Aug` mystery from Stage 1 is solved.** National Women's Day falls on Sunday
+  9 Aug 2026, so under the Public Holidays Act's Sunday rule the Monday is a public
+  holiday. The column exists because someone laid the month out; it is empty because the
+  office was shut.
+- Holidays are **computed, not hardcoded** — Easter by the anonymous Gregorian computus,
+  plus the Sunday rule — so next year's calendar needs no maintenance.
+- December 2026 has only **7** required days: 16 Dec is a Wednesday and 25 Dec a Friday.
+  This is the month where the long-term "3 Wednesdays and 3 Fridays" rule gets hard to
+  reach — the caveat flagged in DESIGN.md §7.
+- `attendance.date` has an **FK to `calendar_days`**, so attendance can never exist on a
+  day compliance cannot evaluate. Calendar coverage becomes a hard requirement of import
+  rather than something discovered later when a month reads oddly.
+- Tests run against **PGlite** (real Postgres in WASM), so constraints, enums and foreign
+  keys are genuine — no network, no credentials, no mocks.
+- Re-seeding never overwrites a day a human has ruled on, which is what makes the
+  eventual OFFICE_CLOSED confirmations durable.
 
 ## Stage 3: Identity resolution + first import (no AI)
 Goal: Parser output lands in the database. Names normalised deterministically.
