@@ -5,17 +5,31 @@
  * the same file always yields the same records, so a change in any number here
  * should be a decision someone made, not a surprise.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseWorkbook } from "../parse-workbook";
 import type { WorkbookParseResult } from "../types";
 
+/**
+ * The real workbook is deliberately NOT in version control - it holds named
+ * employees alongside illness and maternity records. It lives on disk only.
+ *
+ * These tests fail loudly rather than skipping when it is absent: a green run
+ * that silently tested nothing would be worse than a red one.
+ */
 const WORKBOOK = path.resolve(__dirname, "../../../data_example.xls.xlsx");
 
 let result: WorkbookParseResult;
 
 beforeAll(() => {
+  if (!existsSync(WORKBOOK)) {
+    throw new Error(
+      `Fixture workbook not found at ${WORKBOOK}.\n` +
+        `It is excluded from git on purpose (real employee data). Copy it into ` +
+        `the project root to run these tests.`,
+    );
+  }
   result = parseWorkbook(readFileSync(WORKBOOK));
 });
 
