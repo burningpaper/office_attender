@@ -290,4 +290,19 @@ Success Criteria:
 - No unauthenticated route exposes employee data; uploaded files in private storage.
 - Full test suite green; deployed and verified against production.
 - `.claude/DEVELOPER_LOGS.md` written.
-Status: Not Started
+Status: **Auth and docs complete** (16 new tests, 230 total). Deploy awaiting your go-ahead.
+
+Notes from the build:
+- **Next 16 renamed `middleware.ts` to `proxy.ts`.** Checked rather than assumed — the old
+  name still builds but logs a deprecation.
+- **Closed by default.** The proxy lists the handful of open paths explicitly and closes
+  everything else, so a route added next year is private the moment it exists rather than
+  whenever somebody remembers. There is a test asserting exactly that.
+- **A missing `AUTH_SECRET` returns 500, not open access.** The safe reading of "I cannot
+  check whether you are allowed in" is no.
+- Verified over HTTP with no cookie: pages 307 to the login screen, API routes 401, and no
+  employee name or address appears in any response body. A forged cookie is rejected.
+- Sessions are HMAC-signed, expire after 12 hours, and the cookie is httpOnly, sameSite
+  lax, and secure in production. Password comparison is constant-time.
+- The login `next` parameter only ever redirects within the app — an open redirect there
+  would make a link that looks like ours land somewhere that is not.

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { ComplianceTable } from "./components/compliance-table";
+import { SignOut } from "./components/sign-out";
 import { loadEmployeeRows } from "@/lib/compliance/load";
 import { db } from "@/lib/db/client";
 import { attendance } from "@/lib/db/schema";
@@ -79,6 +80,7 @@ export default async function Page({
           >
             Upload workbook
           </Link>
+          <SignOut />
           </div>
         </div>
         <p className="mt-1 text-sm text-muted">
