@@ -82,6 +82,20 @@ export const dayType = pgEnum("day_type", [
   "OFFICE_CLOSED",
 ]);
 
+/** Which compliance failure a mailing was aimed at. */
+export const emailCategory = pgEnum("email_category", [
+  "MONTHLY",
+  "TWO_WEEK",
+  "LONG_TERM",
+]);
+
+export const emailSendStatus = pgEnum("email_send_status", [
+  "PENDING",
+  "SENT",
+  "FAILED",
+  "SKIPPED",
+]);
+
 export const uploadStatus = pgEnum("upload_status", [
   "PENDING",
   "PREVIEWED",
@@ -155,6 +169,12 @@ export const employees = pgTable(
     firstSeenDate: date("first_seen_date"),
     lastSeenDate: date("last_seen_date"),
     status: employeeStatus("status").notNull().default("ACTIVE"),
+    /**
+     * Work email. Nullable on purpose - the roster comes from a spreadsheet
+     * that has never contained one, so somebody has to supply them separately
+     * and there will always be people who have not been matched yet.
+     */
+    email: text("email"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -263,6 +283,45 @@ export const attendance = pgTable(
   (t) => [
     primaryKey({ columns: [t.employeeId, t.date] }),
     index("attendance_date_idx").on(t.date),
+  ],
+);
+
+/**
+ * Every message this system has sent, or tried to.
+ *
+ * Append-only and complete, including the rendered body. Mailing somebody about
+ * their own attendance is the one thing here that reaches outside the building,
+ * so "what exactly did we send Nadine on the 3rd, and why was she on the list?"
+ * has to be answerable months later without anyone guessing.
+ */
+export const emailSends = pgTable(
+  "email_sends",
+  {
+    id: serial("id").primaryKey(),
+    /** Groups everything sent in one go. */
+    batchId: text("batch_id").notNull(),
+    employeeId: integer("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** The address used, kept even if the employee record later changes. */
+    email: text("email").notNull(),
+    category: emailCategory("category").notNull(),
+    /** The month the report was showing when this was sent. */
+    month: text("month").notNull(),
+    subject: text("subject").notNull(),
+    /** Exactly what was sent, rendered. */
+    bodyHtml: text("body_html").notNull(),
+    status: emailSendStatus("status").notNull().default("PENDING"),
+    error: text("error"),
+    /** Dates quoted in the message, so the claim can be checked later. */
+    attendedDates: jsonb("attended_dates"),
+    missedDates: jsonb("missed_dates"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("email_sends_batch_idx").on(t.batchId),
+    index("email_sends_employee_idx").on(t.employeeId),
   ],
 );
 

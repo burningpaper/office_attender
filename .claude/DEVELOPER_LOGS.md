@@ -390,3 +390,59 @@ sitting somewhere waiting to be forgotten.
 
 **Next:** Stage 8 — authentication, deploy, docs. Nothing goes online before the first of
 those.
+
+## 2026-09-01 — The emailer
+
+This is the first part of the system that reaches outside the building, so most of the
+work went into what it refuses to do.
+
+Three exclusions are absolute, and they live in the library rather than the interface,
+where a later change could quietly skip them. Exempt people are never mailed — telling
+somebody on maternity leave, or somebody who lives four hundred kilometres away, that they
+have not been in the office would be worse than sending nothing. Nobody without an address
+is mailed. And nobody whose verdict is `NA` is mailed, because `NA` means the question
+could not be answered, not that they failed. That last one matters more than it sounds:
+mailing the September "not yet" cohort would be the original bug from the spec, with a
+stamp on it.
+
+Excused days get their own line, labelled as not counted. Under the agreed policy a
+recorded reason removes the day from the denominator, so listing it under "you did not
+attend" would be telling somebody they failed on a day they were signed off sick.
+
+### The 200 that meant nothing
+
+The n8n workflow validated its input by throwing. That reads fine until you notice what
+n8n does with it: a thrown error skips the respond node entirely, and the webhook falls
+back to answering 200 with an empty body. From the app's side that is indistinguishable
+from a successful send. Every malformed address would have been recorded as delivered.
+
+Two changes. The workflow now *returns* validation failures and routes them to a real 400
+with a reason. And the client asserts success rather than assuming it: anything that is not
+an explicit `ok: true` — a 500, an empty body, HTML from a proxy — is a failure. Both are
+tested, including the empty-200 case specifically.
+
+The workflow was built through the MCP server and verified against the live instance: a
+valid dry run answers 200, a malformed address 400 with the reason, a request with no
+secret 403.
+
+### Dry run as a first-class path
+
+The workflow has a dry-run branch that exercises everything — the webhook auth, the
+payload validation, the whole chain — and stops short of Graph. It means the plumbing can
+be proved on a Tuesday afternoon without a single employee receiving anything, which is the
+difference between testing this feature and hoping about it.
+
+A real send additionally needs the word SEND typed, and that is checked on the server, not
+just in the browser.
+
+### Two smaller things the linter caught
+
+The send client created an abort timer per recipient and never cleared it, so fifty
+recipients left fifty dangling timers holding the process open. And the recipient loader
+set state directly in an effect, which turned out to hide a real race: flicking between
+categories could land an older response on top of a newer one and show the wrong people as
+about to be emailed. Both fixed, the second with an abortable request rather than a
+suppression.
+
+**Still not done, and still the blocker:** there is no authentication. The app now holds
+attendance records, illness reasons, and email addresses, and can send mail. Stage 8.

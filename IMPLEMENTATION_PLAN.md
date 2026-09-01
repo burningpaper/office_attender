@@ -221,6 +221,45 @@ Notes from the build:
 - The file is re-sent for the commit rather than held server-side between preview and
   approval — it is small, and it means no half-finished import sits anywhere.
 
+## Stage 7b: Emailer
+Goal: Bulk-mail non-compliant people via n8n and MS Graph, with each person's own
+attended/missed dates appended.
+Success Criteria:
+- Category picker builds a recipient list; exempt people are never included.
+- Email addresses can be pasted in and matched to the roster.
+- Dry run exercises the whole chain, including Microsoft auth, and sends nothing.
+- Every send is recorded with the dates it quoted.
+Status: **Complete** — 42 new tests (206 total). n8n workflow `ihvZfOZeDcc7yvV9` built via
+MCP and verified live: valid dry run 200, malformed address 400, missing secret 403.
+
+Notes from the build:
+- **The workflow used to answer 200 with an empty body on a validation failure.** A thrown
+  error in a Code node skips the respond node, so n8n falls back to a bare 200 — which the
+  app would have recorded as a successful send. Validation failures are now *returned*, and
+  routed to a real 400. The client also refuses to treat anything but an explicit `ok:true`
+  as a send.
+- Three exclusions are enforced in the library, not the interface: exempt people, people
+  with no address, and anybody whose verdict is not NO. **`NA` is not a failure** — mailing
+  the September "not yet" cohort would be the original bug with a stamp on it.
+- Excused days are listed separately and labelled as not counted. Telling somebody they
+  failed to attend on a day they were signed off sick is how a system gets switched off.
+- A real send needs `confirm: "SEND"` **checked on the server**, so clicking about in the
+  network tab cannot shortcut it.
+- Fixed a leaked timer in the send client (one dangling `setTimeout` per recipient) and a
+  race in the recipient loader where flicking between categories could land an older
+  response on top of a newer one.
+
+### Open questions for you
+
+1. **Sender address.** The spec says "my email address". The only Microsoft Graph
+   credential on the n8n instance sends as `notifications.za@vml.com`, so that is the
+   default (`OFFICE_ATTENDANCE_SENDER` in `.env.local`). Sending as you personally needs a
+   credential with `Send as` rights on your mailbox.
+2. **"This week"** is not a metric the system has. The three categories offered are the
+   three columns that exist: this month, two-week, and long-term.
+3. **"Sent" means accepted by Microsoft for delivery**, not delivered. Graph answers 202 on
+   accept; a later bounce is not visible to this system.
+
 ## Stage 8: Auth, deploy, docs
 Goal: Behind authentication, on Vercel, documented.
 Success Criteria:

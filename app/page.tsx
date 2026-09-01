@@ -66,12 +66,20 @@ export default async function Page({
       <header className="mb-7">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">Office attendance</h1>
+          <div className="flex gap-2">
+          <Link
+            href="/email"
+            className="rounded border border-border-soft px-2.5 py-1.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-foreground"
+          >
+            Email
+          </Link>
           <Link
             href="/upload"
             className="rounded border border-border-soft px-2.5 py-1.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-foreground"
           >
             Upload workbook
           </Link>
+          </div>
         </div>
         <p className="mt-1 text-sm text-muted">
           {monthLabel} · Wednesdays and Fridays ·{" "}

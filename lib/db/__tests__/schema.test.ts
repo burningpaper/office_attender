@@ -31,6 +31,7 @@ describe("migrations", () => {
       "attendance",
       "attendance_history",
       "calendar_days",
+      "email_sends",
       "employee_aliases",
       "employees",
       "exemptions",
