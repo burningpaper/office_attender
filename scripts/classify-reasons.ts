@@ -48,6 +48,16 @@ async function main() {
     var report = await syncReasonClassifications(db, createAnthropicClassifier());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (/credit balance is too low/i.test(message)) {
+      console.error(
+        "The API key and workspace are correct, but the account has no credits.\n\n" +
+          "Add credits at console.anthropic.com → Plans & Billing, then re-run.\n" +
+          "This job is one request covering 35 strings — a few cents at most.\n\n" +
+          "Nothing else is blocked: the app works with reasons left unclassified,\n" +
+          "and running this later reclassifies them without a re-import.",
+      );
+      process.exit(1);
+    }
     if (/anthropic-workspace-id/i.test(message)) {
       console.error(
         "This API key is identity-linked, so it must name the workspace it acts in.\n\n" +
