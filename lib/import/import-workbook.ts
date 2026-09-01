@@ -35,6 +35,12 @@ export type ImportReport = {
   alreadyImported: boolean;
   uploadId?: number;
   dateRange: { start: string; end: string } | null;
+  people: {
+    /** Marked as having left, because they are not on the newest sheet. */
+    departed: { displayName: string; lastSeenDate: string | null }[];
+    /** Marked as back, having reappeared on the newest sheet. */
+    returned: string[];
+  };
   identities: {
     total: number;
     matchedExisting: number;
@@ -111,6 +117,7 @@ export async function importWorkbook(
       dateRange: existing[0].dateRangeStart
         ? { start: existing[0].dateRangeStart, end: existing[0].dateRangeEnd! }
         : null,
+      people: { departed: [], returned: [] },
       identities: { total: 0, matchedExisting: 0, created: 0, bySimilarity: [], needingReview: [] },
       attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0 },
       reasons: { distinct: 0, created: 0 },
@@ -201,6 +208,7 @@ export async function importWorkbook(
     filename,
     alreadyImported: false,
     dateRange,
+    people: { departed: [], returned: [] },
     identities: {
       total: identities.length,
       matchedExisting: identities.filter((i) => i.employeeId !== undefined).length,
@@ -572,6 +580,67 @@ export async function importWorkbook(
     ) w
     where w.employee_id = e.id
   `);
+
+  /**
+   * Who has left.
+   *
+   * The signal is the roster, not attendance: somebody who is on the newest
+   * sheet with a month of zeroes has not left, they have simply not come in.
+   * Somebody whose name is no longer printed on the sheet at all has gone.
+   *
+   * Rejoining is handled by the same rule running in reverse - reappearing on
+   * the newest sheet sets them back to ACTIVE - so a name omitted from one
+   * month by mistake corrects itself on the next upload rather than needing
+   * anybody to remember.
+   */
+  const newestSheet = [...finalParse.sheets]
+    .filter((sheet) => sheet.isDataSheet && sheet.dateRange)
+    .sort((a, b) => a.dateRange!.end.localeCompare(b.dateRange!.end))
+    .pop();
+
+  if (newestSheet) {
+    const onNewestSheet = new Set(
+      finalParse.employees
+        .filter((row) => row.sheetName === newestSheet.sheetName)
+        .map((row) => idByRawName.get(row.rawName))
+        .filter((id): id is number => id !== undefined),
+    );
+
+    const everyone = await db
+      .select({
+        id: s.employees.id,
+        displayName: s.employees.displayName,
+        status: s.employees.status,
+        lastSeenDate: s.employees.lastSeenDate,
+      })
+      .from(s.employees);
+
+    const nowDeparted = everyone.filter(
+      (person) => !onNewestSheet.has(person.id) && person.status !== "DEPARTED",
+    );
+    const nowReturned = everyone.filter(
+      (person) => onNewestSheet.has(person.id) && person.status === "DEPARTED",
+    );
+
+    if (nowDeparted.length > 0) {
+      await db
+        .update(s.employees)
+        .set({ status: "DEPARTED", updatedAt: new Date() })
+        .where(inArray(s.employees.id, nowDeparted.map((p) => p.id)));
+      report.people.departed = nowDeparted.map((p) => ({
+        displayName: p.displayName,
+        lastSeenDate: p.lastSeenDate,
+      }));
+    }
+
+    if (nowReturned.length > 0) {
+      await db
+        .update(s.employees)
+        .set({ status: "ACTIVE", updatedAt: new Date() })
+        .where(inArray(s.employees.id, nowReturned.map((p) => p.id)));
+      report.people.returned = nowReturned.map((p) => p.displayName);
+    }
+  }
 
   await db
     .update(s.uploads)

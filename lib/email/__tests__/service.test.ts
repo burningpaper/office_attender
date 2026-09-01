@@ -45,14 +45,22 @@ describe("building the list from real data", () => {
       ctx.db, "MONTHLY", "2026-08", "2026-08-31",
     );
 
-    const exemptNames = excluded.filter((e) => e.reason === "EXEMPT").map((e) => e.displayName);
-    expect(exemptNames.sort()).toEqual([
+    const allExempt = [
       "Hannerie Lotz", "Jana Kleinloog", "Kelly-Ann Tabone", "Kevin Irwin",
       "Mary Rodrigues-Jack", "Rialene Nel", "Sandra McDiarmid",
-    ]);
-    for (const name of exemptNames) {
-      expect(recipients.map((r) => r.displayName)).not.toContain(name);
+    ];
+
+    // What matters is that none of them receives anything.
+    for (const name of allExempt) {
+      expect(recipients.map((r) => r.displayName), name).not.toContain(name);
+      expect(excluded.map((e) => e.displayName)).toContain(name);
     }
+
+    // Kelly-Ann Tabone is exempt *and* left in April. The departure check runs
+    // first, so she is excluded as LEFT - either reason keeps her out.
+    const byName = Object.fromEntries(excluded.map((e) => [e.displayName, e.reason]));
+    expect(byName["Kelly-Ann Tabone"]).toBe("LEFT");
+    expect(byName["Kevin Irwin"]).toBe("EXEMPT");
   }, 180_000);
 
   it("emails nobody at all for a month that has not happened", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { filterRows, sortRows, type Direction, type SortKey } from "@/lib/compliance/sort";
 import type { EmployeeRowWithDays } from "@/lib/compliance/types";
 import { LongTermCell, VerdictCell } from "./verdict";
@@ -48,15 +48,23 @@ export function ComplianceTable({
   const [direction, setDirection] = useState<Direction>("asc");
   const [showExempt, setShowExempt] = useState(false);
   const [onlyProblems, setOnlyProblems] = useState(false);
+  const [showLeavers, setShowLeavers] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
 
-  const exemptCount = rows.filter((r) => r.isExempt).length;
+  const onRoster = rows.filter((r) => r.onRosterThisMonth);
+  const exemptCount = onRoster.filter((r) => r.isExempt).length;
+  const leaverCount = rows.length - onRoster.length;
 
-  const visible = useMemo(
-    () =>
-      sortRows(filterRows(rows, { showExempt, onlyProblems, query }), sortKey, direction),
-    [rows, showExempt, onlyProblems, query, sortKey, direction],
+  /**
+   * Not memoised. Eighty-odd rows sort in well under a millisecond, and the
+   * React Compiler handles this better than a hand-written useMemo - which it
+   * flagged as unpreservable anyway.
+   */
+  const visible = sortRows(
+    filterRows(rows, { showExempt, onlyProblems, query, showLeavers }),
+    sortKey,
+    direction,
   );
 
   function toggleSort(key: SortKey) {
@@ -68,7 +76,7 @@ export function ComplianceTable({
     }
   }
 
-  const needAttention = rows.filter((r) => r.monthly.verdict === "NO").length;
+  const needAttention = onRoster.filter((r) => r.monthly.verdict === "NO").length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -84,6 +92,9 @@ export function ComplianceTable({
         setOnlyProblems={setOnlyProblems}
         shown={visible.length}
         exemptCount={exemptCount}
+        leaverCount={leaverCount}
+        showLeavers={showLeavers}
+        setShowLeavers={setShowLeavers}
         needAttention={needAttention}
       />
 
@@ -185,6 +196,11 @@ function Row({
             {row.isExempt && (
               <span className="ml-2 rounded bg-exempt-bg px-1.5 py-0.5 text-[0.65rem] text-exempt">
                 {row.exemptionNote ?? "Exempt"}
+              </span>
+            )}
+            {!row.onRosterThisMonth && (
+              <span className="ml-2 rounded bg-na-bg px-1.5 py-0.5 text-[0.65rem] text-na">
+                {row.hasLeft ? "Left" : "Not on this sheet"}
               </span>
             )}
           </button>
@@ -300,6 +316,9 @@ function Controls(props: {
   setOnlyProblems: (v: boolean) => void;
   shown: number;
   exemptCount: number;
+  leaverCount: number;
+  showLeavers: boolean;
+  setShowLeavers: (v: boolean) => void;
   needAttention: number;
 }) {
   return (
@@ -349,12 +368,22 @@ function Controls(props: {
           checked={props.showExempt}
           onChange={props.setShowExempt}
         />
+        {props.leaverCount > 0 && (
+          <Toggle
+            label={`Show people who have left (${props.leaverCount})`}
+            checked={props.showLeavers}
+            onChange={props.setShowLeavers}
+          />
+        )}
       </div>
 
       <p className="text-xs text-muted">
         <span className="tabular font-medium text-foreground">{props.shown}</span> shown
         {!props.showExempt && props.exemptCount > 0 && (
           <> · {props.exemptCount} exempt hidden</>
+        )}
+        {!props.showLeavers && props.leaverCount > 0 && (
+          <> · {props.leaverCount} not on this month&rsquo;s sheet</>
         )}
         {props.needAttention > 0 && (
           <>

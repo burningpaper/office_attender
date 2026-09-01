@@ -6,6 +6,8 @@
  * Three exclusions are absolute and are enforced here rather than in the
  * interface, where a future change could quietly skip them:
  *
+ *   - Anybody who has left. Chasing a former employee about their attendance is
+ *     the most obviously wrong message this system could send.
  *   - Anybody exempt. Telling somebody who lives 430km away, or is on
  *     maternity leave, that they have not been in the office would be worse
  *     than sending nothing at all.
@@ -38,7 +40,7 @@ export type Recipient = {
 
 export type ExcludedRecipient = {
   displayName: string;
-  reason: "EXEMPT" | "NO_EMAIL" | "NOT_FAILING";
+  reason: "EXEMPT" | "NO_EMAIL" | "NOT_FAILING" | "LEFT";
 };
 
 export type RecipientList = {
@@ -67,6 +69,16 @@ export function buildRecipients(
   const excluded: ExcludedRecipient[] = [];
 
   for (const row of rows) {
+    /**
+     * Checked first, and checked on two signals rather than one: the durable
+     * status, and whether they were on that month's sheet at all. Either is
+     * enough - a former employee must never receive one of these.
+     */
+    if (row.hasLeft || !row.onRosterThisMonth) {
+      excluded.push({ displayName: row.displayName, reason: "LEFT" });
+      continue;
+    }
+
     if (row.isExempt) {
       excluded.push({ displayName: row.displayName, reason: "EXEMPT" });
       continue;

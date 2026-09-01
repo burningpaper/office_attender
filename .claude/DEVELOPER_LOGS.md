@@ -446,3 +446,40 @@ suppression.
 
 **Still not done, and still the blocker:** there is no authentication. The app now holds
 attendance records, illness reasons, and email addresses, and can send mail. Stage 8.
+
+## 2026-09-01 — People who have left
+
+The emailer made this urgent. Chasing a former employee about their office attendance is
+the most obviously wrong message the system could send, and until now nothing distinguished
+somebody who had left from somebody who simply had not come in.
+
+The distinction turns out to be sharp, and it is not about attendance at all. Everybody on
+a month's sheet gets a row, whether they attended or not — Kevin Irwin has seven months of
+zeroes and Francesca Tiganis has not been in once. Neither has left. What marks a departure
+is the name no longer being printed on the sheet. So detection reads the roster, not the
+attendance, and the fifteen people it found were last printed in March, April, June, July
+and August respectively.
+
+Getting that backwards would have been quietly catastrophic: marking people as departed for
+not attending would remove exactly the people the report exists to surface, and the report
+would look reassuringly empty.
+
+Rejoining runs the same rule in reverse. If somebody is left off a month by mistake they
+are marked as gone, and reappear as active the moment the next upload includes them again —
+no one has to remember, and no one has to go and unmark anything by hand.
+
+A leaver keeps their history. Chadley Potgieter went after August and still appears in the
+August report, because he was on the August sheet. It is only the months he was absent from
+that stop listing him.
+
+Two independent things now keep a leaver out of an email: the durable status, and whether
+they were on that month's sheet at all. Either alone would do; having both means a stale
+status cannot leak a message to somebody who has gone.
+
+One wrinkle worth recording. Kelly-Ann Tabone is both exempt — she lives in Langebaan — and
+departed, having last appeared in April. The departure check runs first, so she is now
+excluded as LEFT rather than EXEMPT, and the report's exempt count dropped from seven to
+six. Both reasons keep her out; only the label changed. A test asserts exactly that, because
+the first version of it asserted the label and broke.
+
+**Next:** Stage 8 — authentication, deploy, docs. Still the blocker.

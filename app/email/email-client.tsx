@@ -9,6 +9,7 @@ import type { SendResult } from "@/lib/email/service";
 const CATEGORIES: EmailCategory[] = ["MONTHLY", "TWO_WEEK", "LONG_TERM"];
 
 const EXCLUSION_LABELS: Record<string, string> = {
+  LEFT: "Has left — never emailed",
   EXEMPT: "Exempt — never emailed",
   NO_EMAIL: "No email address on file",
   NOT_FAILING: "Not failing this category",

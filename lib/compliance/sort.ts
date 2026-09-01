@@ -16,6 +16,8 @@ export type Filters = {
   showExempt: boolean;
   onlyProblems: boolean;
   query: string;
+  /** Include people who were not on this month's sheet. Off by default. */
+  showLeavers?: boolean;
 };
 
 export function filterRows(
@@ -23,6 +25,14 @@ export function filterRows(
   filters: Filters,
 ): EmployeeRowWithDays[] {
   let list = rows;
+
+  /**
+   * Somebody who is not on this month's sheet has left, or had not joined.
+   * Either way they are not part of this month's question, and leaving them in
+   * as a column of dashes is noise.
+   */
+  if (!filters.showLeavers) list = list.filter((r) => r.onRosterThisMonth);
+
   if (!filters.showExempt) list = list.filter((r) => !r.isExempt);
   if (filters.onlyProblems) list = list.filter((r) => r.monthly.verdict === "NO");
 

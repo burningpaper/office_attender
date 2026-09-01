@@ -260,6 +260,30 @@ Notes from the build:
 3. **"Sent" means accepted by Microsoft for delivery**, not delivered. Graph answers 202 on
    accept; a later bounce is not visible to this system.
 
+## Stage 7c: People who have left
+Goal: Mark anybody no longer on the newest sheet as having left, keep them out of the
+current month, and never email them.
+Success Criteria:
+- Leavers detected from the roster, not from attendance.
+- Hidden from the report for months they were not on, with a toggle and a count.
+- Never appear in an email list.
+- Somebody who reappears is un-marked automatically.
+Status: **Complete** — 8 new tests (214 total). 15 of 82 marked as having left.
+
+Notes from the build:
+- **The signal is the roster, not attendance.** Somebody on the newest sheet with a month
+  of zeroes has not left — they are precisely who the report exists to surface. Francesca
+  Tiganis has not attended once in seven months and stays ACTIVE. It is disappearing from
+  the sheet that means gone.
+- **Rejoining is handled by the same rule in reverse.** A name left off one month by
+  mistake corrects itself on the next upload rather than needing anyone to remember.
+- Two independent guards keep a leaver out of an email: the durable `status`, and whether
+  they were on that month's sheet at all. Either alone is sufficient.
+- Their history is untouched — Chadley Potgieter left after August and still appears in
+  the August report, because he was on the August sheet.
+- **Kelly-Ann Tabone is both exempt and departed.** The departure check runs first, so she
+  is excluded as LEFT. The exempt count dropped from 7 to 6 for that reason.
+
 ## Stage 8: Auth, deploy, docs
 Goal: Behind authentication, on Vercel, documented.
 Success Criteria:

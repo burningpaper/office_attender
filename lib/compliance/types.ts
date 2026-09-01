@@ -28,6 +28,8 @@ export type EmployeeInput = {
   exemptions: Exemption[];
   /** date -> state. Absent dates may simply be missing. */
   attendance: Map<string, AttendanceState>;
+  /** Marked as having left the company. */
+  hasLeft?: boolean;
 };
 
 export type ComplianceResult = {
@@ -71,6 +73,15 @@ export type EmployeeRow = {
   displayName: string;
   isExempt: boolean;
   exemptionNote: string | null;
+  /** Marked as having left: no longer printed on the newest sheet. */
+  hasLeft: boolean;
+  /**
+   * Whether their name appears on the selected month's sheet at all.
+   *
+   * Distinct from hasLeft, which is a single current fact. This one is
+   * per-month, so a leaver still shows correctly in the months they worked.
+   */
+  onRosterThisMonth: boolean;
   monthly: ComplianceResult;
   twoWeek: ComplianceResult;
   longTerm: LongTermResult;

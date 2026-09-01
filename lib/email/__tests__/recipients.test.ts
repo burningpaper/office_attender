@@ -23,6 +23,8 @@ function row(name: string, overrides: Partial<EmployeeRowWithDays> = {}): Employ
     displayName: name,
     isExempt: false,
     exemptionNote: null,
+    hasLeft: false,
+    onRosterThisMonth: true,
     monthly: result("NO"),
     twoWeek: result("NO"),
     longTerm: { ...result("NO"), wednesdayAverage: 0, fridayAverage: 0, monthsCounted: 3 },

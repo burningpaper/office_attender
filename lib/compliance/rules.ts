@@ -381,6 +381,9 @@ export function evaluateEmployee(
     displayName: employee.displayName,
     isExempt: exemption !== null,
     exemptionNote: exemption?.rawText ?? exemption?.type ?? null,
+    hasLeft: employee.hasLeft ?? false,
+    onRosterThisMonth: true, // set by the loader, which knows the month's roster
+
     monthly: monthlyCompliance(employee, calendar, month, asOf),
     twoWeek: twoWeekCompliance(employee, calendar, asOf),
     longTerm: longTermCompliance(employee, calendar, asOf),

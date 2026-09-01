@@ -19,6 +19,8 @@ function row(
     displayName: name,
     isExempt: false,
     exemptionNote: null,
+    hasLeft: false,
+    onRosterThisMonth: true,
     monthly: result("YES"),
     twoWeek: result("YES"),
     longTerm: { ...result("YES"), wednesdayAverage: 3, fridayAverage: 3, monthsCounted: 3 },

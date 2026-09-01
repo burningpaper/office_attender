@@ -76,9 +76,9 @@ export default async function EmailPage({
 
       <footer className="mt-8 border-t border-border-soft pt-4 text-xs text-subtle">
         <p>
-          Exempt people are never emailed, whatever their verdict. Neither is anybody whose
-          verdict is &ldquo;not yet&rdquo; — that means the question could not be answered,
-          not that they failed.
+          Nobody who has left is emailed, and neither is anybody exempt, whatever their
+          verdict. Nor anybody whose verdict is &ldquo;not yet&rdquo; — that means the
+          question could not be answered, not that they failed.
         </p>
         <p className="mt-1">
           Each message quotes only that person&rsquo;s own dates. Everything sent is recorded.

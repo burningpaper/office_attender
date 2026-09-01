@@ -100,6 +100,7 @@ export async function loadEmployeeRows(
         active: e.active,
       })),
       attendance: attendanceByEmployee.get(employee.id) ?? new Map(),
+      hasLeft: employee.status === "DEPARTED",
     };
     const row = evaluateEmployee(input, calendar, month, asOf);
 
@@ -135,7 +136,15 @@ export async function loadEmployeeRows(
         };
       });
 
-    return { ...row, monthDays };
+    /**
+     * Whether this person's name was on the sheet for the month being viewed.
+     * A leaver keeps their history: they simply stop appearing once they go.
+     */
+    const onRosterThisMonth = [...(details?.keys() ?? [])].some((date) =>
+      date.startsWith(month),
+    );
+
+    return { ...row, monthDays, onRosterThisMonth };
   });
 
 }
