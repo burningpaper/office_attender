@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Real attendance data — contains named employees, illness/maternity records
+# and home towns. Never commit. Keep it on disk only.
+/data_example.xls.xlsx
+*.xls
+*.xlsx
