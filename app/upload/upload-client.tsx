@@ -24,23 +24,34 @@ export function UploadClient() {
     const form = new FormData();
     form.append("file", chosen);
 
-    const response = await fetch("/api/import/preview", { method: "POST", body: form });
-    const body = await response.json();
+    try {
+      const response = await fetch("/api/import/preview", { method: "POST", body: form });
+      const text = await response.text();
+      const body = text ? JSON.parse(text) : null;
 
-    if (!response.ok) {
-      setError(body.error ?? "The file could not be read.");
+      if (!response.ok || !body) {
+        setError(body?.error ?? `The server answered ${response.status}.`);
+        setPhase("error");
+        return;
+      }
+
+      setReport(body as ImportReport);
+      setDecisions({});
+      setPhase("reviewing");
+    } catch (cause) {
+      // A rejected fetch used to leave the screen stuck on "Reading the
+      // workbook..." with nothing to explain it.
+      setError(
+        `Could not reach the server: ${cause instanceof Error ? cause.message : "unknown error"}.`,
+      );
       setPhase("error");
-      return;
     }
-
-    setReport(body as ImportReport);
-    setDecisions({});
-    setPhase("reviewing");
   }, []);
 
   async function commit() {
     if (!file || !report) return;
     setPhase("committing");
+    setError(null);
 
     const resolutions: AnomalyResolution[] = report.anomalies
       .filter((a) => a.id in decisions)
@@ -50,17 +61,27 @@ export function UploadClient() {
     form.append("file", file);
     form.append("resolutions", JSON.stringify(resolutions));
 
-    const response = await fetch("/api/import/commit", { method: "POST", body: form });
-    const body = await response.json();
+    try {
+      const response = await fetch("/api/import/commit", { method: "POST", body: form });
+      const text = await response.text();
+      const body = text ? JSON.parse(text) : null;
 
-    if (!response.ok && response.status !== 409) {
-      setError(body.error ?? "The import failed.");
+      // 409 means a question is still open - a normal outcome, not an error.
+      if ((!response.ok && response.status !== 409) || !body) {
+        setError(body?.error ?? `The server answered ${response.status}.`);
+        setPhase("error");
+        return;
+      }
+
+      setReport(body as ImportReport);
+      setPhase(body.committed ? "done" : "reviewing");
+    } catch (cause) {
+      setError(
+        `Could not reach the server: ${cause instanceof Error ? cause.message : "unknown error"}. ` +
+          `The import may or may not have completed - check the report before retrying.`,
+      );
       setPhase("error");
-      return;
     }
-
-    setReport(body as ImportReport);
-    setPhase(body.committed ? "done" : "reviewing");
   }
 
   const blocking = report?.anomalies.filter((a) => a.blocking) ?? [];

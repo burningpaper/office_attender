@@ -611,3 +611,43 @@ refused.
 **Not done:** the deploy. The Vercel CLI is installed but not signed in, and publishing an
 application full of personal information is not something to do on an assumption. Waiting
 on a decision.
+
+## 2026-09-02 — "Nothing happened"
+
+A send that did nothing. No n8n execution, no audit row, no error. The detail that solved
+it was the user's: *the button greyed out and stayed greyed out.*
+
+That is a precise symptom. The button greys when `sending` becomes true and un-greys when
+it becomes false, and `setSending(false)` sat at the bottom of the handler after two
+awaits. There was no try/catch. A rejected fetch — the server gone, a dropped connection,
+a body that will not parse — skipped everything below it, React swallowed the rejection,
+and the interface was left looking broken rather than failed.
+
+Reproducing it took one line: load the page, kill the dev server, click. Button greys,
+nothing else. With the handler wrapped and the state reset in a `finally`, the same
+sequence now says *"Could not reach the server: Failed to fetch. Nothing was sent."*
+
+The upload screen had the identical flaw and would have stuck on "Reading the workbook…"
+for ever. Both fixed, both with a client-side timeout so a hung request cannot pin the
+interface open indefinitely either.
+
+The likely trigger is unglamorous: the dev server was stopped at the end of the previous
+session while their page stayed open.
+
+### Two things found on the way
+
+Diagnosing this, I ran a live send to check the path end to end and forgot the addresses
+are no longer placeholders. Two real employees received a message titled "Test". The
+dry-run path exists precisely so that never has to happen, and I went round it.
+
+The audit trail then earned its keep. Reading back exactly what those two messages said
+revealed a genuine bug: sent on the 2nd, they listed the 4th, 9th and 30th under "you did
+not attend". A month's required days are laid out in advance, so every future one was
+being quoted as a failure. Only elapsed days are quoted now.
+
+### And one silent path closed
+
+The browser holds the recipient list from page load; the server recomputes it at send
+time. When they disagree the intersection can be empty, and the old code answered
+"0 succeeded, 0 failed" — indistinguishable from a dead button, with nothing anywhere to
+inspect. It now says which case it is and suggests a reload.

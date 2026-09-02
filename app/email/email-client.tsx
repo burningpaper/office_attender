@@ -74,26 +74,69 @@ export function EmailClient({ months, month: initialMonth, asOf }: {
     [list, deselected],
   );
 
+  /**
+   * Send, or dry run.
+   *
+   * Every path resets `sending` in a finally. Without it, a fetch that rejects
+   * - the server restarting, a dropped connection, a body that is not JSON -
+   * leaves the button greyed out for ever with nothing on screen: the promise
+   * rejects, React swallows it, and the interface looks broken rather than
+   * failed. That exact silence was reported as "nothing happened".
+   */
   async function submit(dryRun: boolean) {
     setSending(true);
     setError(null);
 
-    const response = await fetch("/api/email/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        category, month, asOf, subject, body, dryRun,
-        onlyEmployeeIds: selected.map((r) => r.employeeId),
-        ...(dryRun ? {} : { confirm: "SEND" }),
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
-    const payload = await response.json();
-    if (!response.ok) setError(payload.error ?? "The send failed.");
-    else setResult(payload);
+    try {
+      const response = await fetch("/api/email/send", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category, month, asOf, subject, body, dryRun,
+          onlyEmployeeIds: selected.map((r) => r.employeeId),
+          ...(dryRun ? {} : { confirm: "SEND" }),
+        }),
+      });
 
-    setSending(false);
-    setConfirmText("");
+      const text = await response.text();
+      let payload: (SendResult & { error?: string }) | null = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        setError(
+          payload?.error ??
+            `The server answered ${response.status}${
+              response.status === 401 ? " - your session has expired. Reload and sign in again." : "."
+            }`,
+        );
+        return;
+      }
+
+      if (!payload) {
+        setError("The server replied with something unreadable. Nothing was sent.");
+        return;
+      }
+
+      setResult(payload);
+    } catch (cause) {
+      setError(
+        cause instanceof Error && cause.name === "AbortError"
+          ? "The request timed out. Some messages may still have gone out - check before resending."
+          : `Could not reach the server: ${cause instanceof Error ? cause.message : "unknown error"}. Nothing was sent.`,
+      );
+    } finally {
+      clearTimeout(timeout);
+      setSending(false);
+      setConfirmText("");
+    }
   }
 
   const canSend = selected.length > 0 && subject.trim() && body.trim() && !sending;
