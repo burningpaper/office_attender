@@ -173,3 +173,38 @@ describe("rendering", () => {
     expect(html).not.toContain("not counted against you");
   });
 });
+
+describe("dates that have not happened yet", () => {
+  it("never quotes a future required day as missed", () => {
+    // The month's required days are laid out in advance. A message sent on the
+    // 2nd once told two people they had failed to attend on the 30th.
+    const person = row("Future Person", {
+      monthDays: [
+        day("2026-09-02", "ABSENT"),
+        day("2026-09-04", "ABSENT"),
+        day("2026-09-30", "ABSENT"),
+      ],
+    });
+    const { recipients } = buildRecipients(
+      [person],
+      "MONTHLY",
+      emails([[13, "x@example.invalid"]]),
+      "2026-09-02",
+    );
+    expect(recipients[0].missed).toEqual(["2026-09-02"]);
+  });
+
+  it("counts a day that has happened", () => {
+    const person = row("Past Person", {
+      monthDays: [day("2026-09-02", "PRESENT"), day("2026-09-04", "ABSENT")],
+    });
+    const { recipients } = buildRecipients(
+      [person],
+      "MONTHLY",
+      emails([[11, "x@example.invalid"]]),
+      "2026-09-04",
+    );
+    expect(recipients[0].attended).toEqual(["2026-09-02"]);
+    expect(recipients[0].missed).toEqual(["2026-09-04"]);
+  });
+});

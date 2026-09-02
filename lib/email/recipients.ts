@@ -14,6 +14,10 @@
  *   - Anybody with no email address on file.
  *   - Anybody whose verdict is not NO. NA means the question could not be
  *     answered - it is not a failure, and must never be mailed as one.
+ *
+ * And one rule about the dates: only days that have actually happened are
+ * quoted. The month's required days are laid out in advance, so without this a
+ * message sent on the 2nd tells somebody they failed to attend on the 30th.
  */
 
 import type { EmployeeRowWithDays, Verdict } from "../compliance/types";
@@ -64,6 +68,8 @@ export function buildRecipients(
   rows: EmployeeRowWithDays[],
   category: EmailCategory,
   emailByEmployeeId: Map<number, string>,
+  /** Today. Days after this have not happened and are never quoted. */
+  asOf: string = new Date().toISOString().slice(0, 10),
 ): RecipientList {
   const recipients: Recipient[] = [];
   const excluded: ExcludedRecipient[] = [];
@@ -101,6 +107,8 @@ export function buildRecipients(
 
     for (const day of row.monthDays) {
       if (day.outsideEmployment || day.state === "NO_RECORD") continue;
+      // Never tell somebody they missed a day that has not arrived.
+      if (day.date > asOf) continue;
       if (day.state === "PRESENT") attended.push(day.date);
       else if (day.state === "ABSENT_EXPLAINED") excused.push(day.date);
       else missed.push(day.date);

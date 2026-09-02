@@ -344,14 +344,20 @@ function Result({ result }: { result: SendResult }) {
   return (
     <section
       className={`animate-row-in rounded-lg border px-4 py-3 text-sm ${
-        result.failed > 0 ? "border-border-soft bg-no-bg" : "border-border-soft bg-yes-bg"
+        result.failed > 0 || result.nothingToSend
+          ? "border-border-soft bg-no-bg"
+          : "border-border-soft bg-yes-bg"
       }`}
     >
-      <p className={result.failed > 0 ? "text-no" : "text-yes"}>
-        {result.dryRun ? "Dry run: " : ""}
-        {result.sent} succeeded, {result.failed} failed.
-        {result.dryRun && " Nothing was sent."}
-      </p>
+      {result.nothingToSend ? (
+        <p className="text-no">{result.nothingToSend}</p>
+      ) : (
+        <p className={result.failed > 0 ? "text-no" : "text-yes"}>
+          {result.dryRun ? "Dry run: " : ""}
+          {result.sent} succeeded, {result.failed} failed.
+          {result.dryRun && " Nothing was sent."}
+        </p>
+      )}
       {result.sendAs && (
         <p className="mt-1 text-xs text-muted">
           Sending as <span className="tabular">{result.sendAs}</span>, according to Microsoft.

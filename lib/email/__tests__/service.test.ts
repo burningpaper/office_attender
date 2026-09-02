@@ -162,3 +162,35 @@ describe("sending", () => {
     process.env.N8N_EMAIL_WEBHOOK_URL = saved;
   }, 180_000);
 });
+
+describe("when the browser's list and the server's disagree", () => {
+  it("says so rather than silently doing nothing", async () => {
+    // A page left open overnight can name people who are no longer in the
+    // category. The intersection is then empty, nothing is sent, and without
+    // this it reports "0 succeeded, 0 failed" - indistinguishable from a
+    // broken button.
+    const ctx = await seeded();
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), { status: 200 })));
+
+    const result = await sendCampaign(ctx.db, {
+      category: "MONTHLY", month: "2026-08", asOf: "2026-08-31",
+      subject: "s", body: "b", dryRun: false,
+      onlyEmployeeIds: [999_999],
+    });
+
+    expect(result.sent).toBe(0);
+    expect(result.nothingToSend).toMatch(/none of the 1 selected people/i);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await ctx.db.select().from(s.emailSends)).toHaveLength(0);
+  });
+
+  it("says something different when the category itself is empty", async () => {
+    const ctx = await seeded();
+    const result = await sendCampaign(ctx.db, {
+      category: "MONTHLY", month: "2026-09", asOf: "2026-09-01",
+      subject: "s", body: "b", dryRun: false,
+    });
+    expect(result.nothingToSend).toMatch(/nobody is in this category/i);
+  });
+});

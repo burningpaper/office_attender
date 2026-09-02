@@ -29,7 +29,7 @@ export async function loadRecipientList(
     if (person.email) emailByEmployeeId.set(person.id, person.email);
   }
 
-  return buildRecipients(rows, category, emailByEmployeeId);
+  return buildRecipients(rows, category, emailByEmployeeId, asOf);
 }
 
 export type SendResult = {
@@ -37,6 +37,16 @@ export type SendResult = {
   dryRun: boolean;
   sent: number;
   failed: number;
+  /**
+   * Set when the request named people who are no longer in the category.
+   *
+   * The browser holds a list built at page load; this recomputes it at send
+   * time. If the two disagree - the page has been open since yesterday, the
+   * month rolled over, somebody re-imported - the intersection can be empty,
+   * and the result is a silent no-op that looks exactly like a broken button.
+   * Saying so is the difference between a bug report and a reload.
+   */
+  nothingToSend?: string;
   /** The mailbox these went from, as reported by Microsoft on a dry run. */
   sendAs?: string;
   outcomes: SendOutcome[];
@@ -73,6 +83,20 @@ export async function sendCampaign(
   const chosen = input.onlyEmployeeIds
     ? recipients.filter((r) => input.onlyEmployeeIds!.includes(r.employeeId))
     : recipients;
+
+  if (chosen.length === 0) {
+    return {
+      batchId: randomUUID(),
+      dryRun: input.dryRun,
+      sent: 0,
+      failed: 0,
+      nothingToSend:
+        recipients.length === 0
+          ? `Nobody is in this category for ${input.month} any more, so there was nothing to send.`
+          : `None of the ${input.onlyEmployeeIds?.length ?? 0} selected people are still in this category for ${input.month}. The page may have been open a while - reload it and check the list.`,
+      outcomes: [],
+    };
+  }
 
   const batchId = randomUUID();
   const rendered = chosen.map((recipient) => ({
