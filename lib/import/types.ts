@@ -81,6 +81,23 @@ export type SheetAnnotation = {
   text: string;
 };
 
+/**
+ * A person listed on a staff-roster tab.
+ *
+ * From September 2026 the workbook carries a "CT STAFF" tab: names and email
+ * addresses, no dates. It is the authoritative list of who works there, which
+ * the attendance tabs are not - somebody can be employed and simply not
+ * expected in the Cape Town office that month.
+ */
+export type RosterPerson = {
+  sheetName: string;
+  rowNumber: number;
+  firstName: string;
+  lastName: string;
+  rawName: string;
+  email: string | null;
+};
+
 export type SheetReport = {
   sheetName: string;
   isDataSheet: boolean;
@@ -99,5 +116,7 @@ export type WorkbookParseResult = {
   employees: ParsedEmployeeRow[];
   records: RawAttendanceRecord[];
   annotations: SheetAnnotation[];
+  /** People from a staff-roster tab, when the workbook has one. */
+  roster: RosterPerson[];
   warnings: ParseWarning[];
 };

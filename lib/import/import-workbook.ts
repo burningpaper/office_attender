@@ -41,6 +41,8 @@ export type ImportReport = {
     departed: { displayName: string; lastSeenDate: string | null }[];
     /** Marked as back, having reappeared on the newest sheet. */
     returned: string[];
+    /** Created because they are on the staff roster but were not on record. */
+    addedFromRoster: string[];
   };
   identities: {
     total: number;
@@ -133,7 +135,7 @@ export async function importWorkbook(
         ? { start: existing[0].dateRangeStart, end: existing[0].dateRangeEnd! }
         : null,
       addresses: { imported: 0, changed: 0 },
-      people: { departed: [], returned: [] },
+      people: { departed: [], returned: [], addedFromRoster: [] },
       identities: { total: 0, matchedExisting: 0, created: 0, bySimilarity: [], needingReview: [] },
       attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0 },
       reasons: { distinct: 0, created: 0 },
@@ -225,7 +227,7 @@ export async function importWorkbook(
     alreadyImported: false,
     dateRange,
     addresses: { imported: 0, changed: 0 },
-    people: { departed: [], returned: [] },
+    people: { departed: [], returned: [], addedFromRoster: [] },
     identities: {
       total: identities.length,
       matchedExisting: identities.filter((i) => i.employeeId !== undefined).length,
@@ -657,7 +659,143 @@ export async function importWorkbook(
    * month by mistake corrects itself on the next upload rather than needing
    * anybody to remember.
    */
-  const newestSheet = (options.updateEmploymentStatus ?? true)
+  /**
+   * Who is employed.
+   *
+   * A staff-roster tab, when the workbook has one, is authoritative: it says
+   * who works here, which an attendance tab does not. Somebody can be employed
+   * and simply not expected in this office that month - in the September 2026
+   * file, 15 people were on the roster but not the attendance sheet.
+   *
+   * Roster people who are not in the database yet are created, because the
+   * roster is the definition of the workforce rather than a record of it.
+   *
+   * But the roster does not get the last word on departures. The September 2026
+   * roster omitted thirteen people who were on that month's attendance sheet,
+   * six of whom were physically in the office four days before the file was
+   * produced. Having been in the office is not something a roster can overrule,
+   * so somebody counts as employed if they appear on EITHER list.
+   */
+  if ((options.updateEmploymentStatus ?? true) && finalParse.roster.length > 0) {
+    const rosterIdentities = resolveIdentities(
+      finalParse.roster.map((person) => ({
+        sheetName: person.sheetName,
+        rowNumber: person.rowNumber,
+        firstName: person.firstName,
+        lastName: person.lastName,
+        rawName: person.rawName,
+        standingNote: null,
+        email: person.email,
+      })),
+      await db
+        .select({
+          id: s.employees.id,
+          normalisedKey: s.employees.normalisedKey,
+          displayName: s.employees.displayName,
+        })
+        .from(s.employees),
+      new Map(
+        (
+          await db
+            .select({
+              rawName: s.employeeAliases.rawName,
+              employeeId: s.employeeAliases.employeeId,
+            })
+            .from(s.employeeAliases)
+        ).map((a) => [a.rawName, a.employeeId]),
+      ),
+    );
+
+    const onRoster = new Set<number>();
+    for (const identity of rosterIdentities) {
+      let employeeId = identity.employeeId;
+
+      if (employeeId === undefined) {
+        const [created] = await db
+          .insert(s.employees)
+          .values({
+            firstName: identity.firstName,
+            lastName: identity.lastName,
+            displayName: identity.displayName,
+            normalisedKey: identity.canonicalKey,
+          })
+          .onConflictDoUpdate({
+            target: s.employees.normalisedKey,
+            set: { updatedAt: new Date() },
+          })
+          .returning();
+        employeeId = created.id;
+        report.people.addedFromRoster.push(identity.displayName);
+      }
+
+      onRoster.add(employeeId);
+
+      await db
+        .insert(s.employeeAliases)
+        .values({ rawName: identity.rawName, employeeId, sourceUploadId: upload.id })
+        .onConflictDoNothing();
+
+      const email = finalParse.roster.find((p) => p.rawName === identity.rawName)?.email;
+      if (email) {
+        await db
+          .update(s.employees)
+          .set({ email, updatedAt: new Date() })
+          .where(eq(s.employees.id, employeeId));
+      }
+    }
+
+    /** Anybody on the newest attendance sheet is employed, roster or not. */
+    const newest = [...finalParse.sheets]
+      .filter((sheet) => sheet.isDataSheet && sheet.dateRange)
+      .sort((a, b) => a.dateRange!.end.localeCompare(b.dateRange!.end))
+      .pop();
+
+    const employed = new Set(onRoster);
+    if (newest) {
+      for (const row of finalParse.employees) {
+        if (row.sheetName !== newest.sheetName) continue;
+        const id = idByRawName.get(row.rawName);
+        if (id !== undefined) employed.add(id);
+      }
+    }
+
+    const everyone = await db
+      .select({
+        id: s.employees.id,
+        displayName: s.employees.displayName,
+        status: s.employees.status,
+        lastSeenDate: s.employees.lastSeenDate,
+      })
+      .from(s.employees);
+
+    const nowDeparted = everyone.filter(
+      (p) => !employed.has(p.id) && p.status !== "DEPARTED",
+    );
+    const nowReturned = everyone.filter(
+      (p) => employed.has(p.id) && p.status === "DEPARTED",
+    );
+
+    if (nowDeparted.length > 0) {
+      await db
+        .update(s.employees)
+        .set({ status: "DEPARTED", updatedAt: new Date() })
+        .where(inArray(s.employees.id, nowDeparted.map((p) => p.id)));
+      report.people.departed = nowDeparted.map((p) => ({
+        displayName: p.displayName,
+        lastSeenDate: p.lastSeenDate,
+      }));
+    }
+    if (nowReturned.length > 0) {
+      await db
+        .update(s.employees)
+        .set({ status: "ACTIVE", updatedAt: new Date() })
+        .where(inArray(s.employees.id, nowReturned.map((p) => p.id)));
+      report.people.returned = nowReturned.map((p) => p.displayName);
+    }
+  }
+
+  const newestSheet =
+    (options.updateEmploymentStatus ?? true) && finalParse.roster.length === 0
     ? [...finalParse.sheets]
         .filter((sheet) => sheet.isDataSheet && sheet.dateRange)
         .sort((a, b) => a.dateRange!.end.localeCompare(b.dateRange!.end))

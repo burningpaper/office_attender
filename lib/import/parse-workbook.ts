@@ -24,6 +24,7 @@ import type {
   ParseWarning,
   ParsedEmployeeRow,
   RawAttendanceRecord,
+  RosterPerson,
   SheetAnnotation,
   SheetReport,
   WorkbookParseResult,
@@ -519,6 +520,55 @@ function isMonthSheet(name: string): boolean {
 }
 
 /**
+ * Read a staff-roster tab: names and addresses, no dates.
+ *
+ * Recognised by shape rather than by tab name, so a rename does not silently
+ * turn the roster back into a skipped sheet. A roster has name headers, an
+ * email column, and no date columns at all.
+ */
+function parseRosterSheet(ws: XLSX.WorkSheet, sheetName: string): RosterPerson[] {
+  const ref = ws["!ref"];
+  if (!ref) return [];
+  const range = XLSX.utils.decode_range(ref);
+
+  let firstNameCol = -1;
+  let lastNameCol = -1;
+  let emailCol = -1;
+
+  for (let col = range.s.c; col <= range.e.c; col++) {
+    const header = cellText(cellAt(ws, range.s.r, col)).toLowerCase();
+    if (/first\s*name/.test(header)) firstNameCol = col;
+    else if (/last\s*name|surname/.test(header)) lastNameCol = col;
+    else if (/e-?mail/.test(header)) emailCol = col;
+    // A date header means this is an attendance sheet, not a roster.
+    if (headerDate(cellAt(ws, range.s.r, col))) return [];
+  }
+
+  if (firstNameCol < 0 || emailCol < 0) return [];
+  if (lastNameCol < 0) lastNameCol = firstNameCol + 1;
+
+  const people: RosterPerson[] = [];
+  for (let row = range.s.r + 1; row <= range.e.r; row++) {
+    const first = tidy(cellText(cellAt(ws, row, firstNameCol)));
+    const last = tidy(cellText(cellAt(ws, row, lastNameCol)));
+    const rawName = tidy(`${first} ${last}`);
+    if (!rawName) continue;
+
+    const email = cellText(cellAt(ws, row, emailCol)).trim().toLowerCase();
+    people.push({
+      sheetName,
+      rowNumber: row + 1,
+      firstName: first,
+      lastName: last,
+      rawName,
+      email: email.includes("@") ? email : null,
+    });
+  }
+
+  return people;
+}
+
+/**
  * Parse the workbook into employees, raw attendance records, and warnings.
  *
  * Sheets not named after a month are skipped and reported - the "Pdf" sheet in
@@ -535,12 +585,29 @@ export function parseWorkbook(
     employees: [] as ParsedEmployeeRow[],
     records: [] as RawAttendanceRecord[],
     annotations: [] as SheetAnnotation[],
+    roster: [] as RosterPerson[],
     warnings: [] as ParseWarning[],
   };
   const sheets: SheetReport[] = [];
 
   for (const sheetName of wb.SheetNames) {
     if (!isMonthSheet(sheetName)) {
+      const roster = parseRosterSheet(wb.Sheets[sheetName], sheetName.trim());
+      if (roster.length > 0) {
+        out.roster.push(...roster);
+        sheets.push({
+          sheetName,
+          isDataSheet: false,
+          skippedReason: `staff roster (${roster.length} people)`,
+          dateColumnCount: 0,
+          dateRange: null,
+          employeeRowCount: roster.length,
+          recordCount: 0,
+          droppedRowCount: 0,
+        });
+        continue;
+      }
+
       out.warnings.push({
         code: "SHEET_SKIPPED",
         sheetName,

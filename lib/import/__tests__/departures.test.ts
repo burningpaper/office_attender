@@ -205,3 +205,64 @@ describe("email addresses carried in the workbook", () => {
     expect(active.filter((e) => e.email)).toHaveLength(65);
   }, 300_000);
 });
+
+describe("a workbook that carries a staff roster", () => {
+  const REGISTER = path.resolve(__dirname, "../../../CT Registry 8 Sept 2026.xlsx");
+
+  it("reads the roster tab by shape, not by tab name", async () => {
+    if (!existsSync(REGISTER)) return;
+    const { parseWorkbook } = await import("../parse-workbook");
+    const parsed = parseWorkbook(readFileSync(REGISTER));
+
+    expect(parsed.roster).toHaveLength(56);
+    expect(parsed.roster.every((p) => p.email)).toBe(true);
+    // A roster has no date columns, so it contributes no attendance.
+    expect(parsed.records.some((r) => r.sheetName === "CT STAFF")).toBe(false);
+  });
+
+  it("does not mistake an attendance tab for a roster", async () => {
+    if (!existsSync(REGISTER)) return;
+    const { parseWorkbook } = await import("../parse-workbook");
+    const parsed = parseWorkbook(readFileSync(REGISTER));
+    expect(new Set(parsed.roster.map((p) => p.sheetName))).toEqual(new Set(["CT STAFF"]));
+  });
+
+  it("treats attendance as proof of employment, whatever the roster says", async () => {
+    if (!existsSync(REGISTER)) return;
+    const ctx = await freshDb();
+    await seedCalendar(ctx.db, 2026, 2026);
+    await importDeclining(ctx.db, readFileSync(REGISTER), "register.xlsx", "2026-09-08");
+
+    /**
+     * The September 2026 roster omits thirteen people who are on that month's
+     * attendance sheet, six of whom were in the office on the 4th. A roster
+     * cannot overrule somebody having physically been there.
+     */
+    for (const name of [
+      "Daniel Rivas", "Isabella Martinez", "Matthew Rudd",
+      "Khanyisa Ketse", "Matthew van Niekerk",
+    ]) {
+      const [person] = await ctx.db
+        .select()
+        .from(s.employees)
+        .where(eq(s.employees.displayName, name));
+      expect(person?.status, name).toBe("ACTIVE");
+    }
+  }, 300_000);
+
+  it("creates people who are on the roster but not yet on record", async () => {
+    if (!existsSync(REGISTER)) return;
+    const ctx = await freshDb();
+    await seedCalendar(ctx.db, 2026, 2026);
+    const report = await importDeclining(
+      ctx.db, readFileSync(REGISTER), "register.xlsx", "2026-09-08",
+    );
+
+    expect(report.people.addedFromRoster.length).toBeGreaterThan(0);
+    const [beach] = await ctx.db
+      .select()
+      .from(s.employees)
+      .where(eq(s.employees.displayName, "Beach Gumede"));
+    expect(beach?.email).toBe("beach.gumede@vml.com");
+  }, 300_000);
+});
