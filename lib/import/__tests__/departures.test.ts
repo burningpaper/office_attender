@@ -7,7 +7,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as s from "../../db/schema";
 import { freshDb, importDeclining } from "../../db/__tests__/helpers";
@@ -265,4 +265,111 @@ describe("a workbook that carries a staff roster", () => {
       .where(eq(s.employees.displayName, "Beach Gumede"));
     expect(beach?.email).toBe("beach.gumede@vml.com");
   }, 300_000);
+});
+
+describe("re-syncing a month's roster", () => {
+  const REGISTER = path.resolve(__dirname, "../../../CT Registry 8 Sept 2026.xlsx");
+  const EARLIER = path.resolve(__dirname, "../../../data_example2.xlsx");
+
+  it("removes people a month's sheet no longer lists", async () => {
+    if (!existsSync(REGISTER) || !existsSync(EARLIER)) return;
+    const ctx = await freshDb();
+    await seedCalendar(ctx.db, 2026, 2026);
+
+    // The earlier file's September tab lists 70 people; the newer one lists 54.
+    await importDeclining(ctx.db, readFileSync(EARLIER), "earlier.xlsx", "2026-09-08");
+    const before = await ctx.db
+      .select()
+      .from(s.attendance)
+      .where(and(gte(s.attendance.date, "2026-09-01"), lte(s.attendance.date, "2026-09-30")));
+
+    await ctx.db.delete(s.uploads);
+    const report = await importDeclining(ctx.db, readFileSync(REGISTER), "newer.xlsx", "2026-09-08");
+
+    expect(report.attendance.removed).toBeGreaterThan(0);
+
+    const after = await ctx.db
+      .select()
+      .from(s.attendance)
+      .where(and(gte(s.attendance.date, "2026-09-01"), lte(s.attendance.date, "2026-09-30")));
+    expect(after.length).toBeLessThan(before.length);
+
+    // Ricardo Thompson comes off the September tab and should leave with it.
+    const [ricardo] = await ctx.db
+      .select()
+      .from(s.employees)
+      .where(eq(s.employees.displayName, "Ricardo Thompson"));
+    const his = after.filter((row) => row.employeeId === ricardo.id);
+    expect(his).toHaveLength(0);
+  }, 600_000);
+
+  it("never removes a day somebody was actually present", async () => {
+    if (!existsSync(REGISTER) || !existsSync(EARLIER)) return;
+    const ctx = await freshDb();
+    await seedCalendar(ctx.db, 2026, 2026);
+    await importDeclining(ctx.db, readFileSync(EARLIER), "earlier.xlsx", "2026-09-08");
+
+    /**
+     * Ricardo Thompson comes off the September tab in the newer file. Give him
+     * one day in the office first: a name coming off a sheet does not unmake
+     * somebody having physically been there, so that day has to survive while
+     * his other September rows go.
+     */
+    const [ricardo] = await ctx.db
+      .select()
+      .from(s.employees)
+      .where(eq(s.employees.displayName, "Ricardo Thompson"));
+
+    await ctx.db
+      .update(s.attendance)
+      .set({ state: "PRESENT", rawValue: "1" })
+      .where(
+        and(eq(s.attendance.employeeId, ricardo.id), eq(s.attendance.date, "2026-09-02")),
+      );
+
+    const before = await ctx.db
+      .select()
+      .from(s.attendance)
+      .where(
+        and(
+          eq(s.attendance.employeeId, ricardo.id),
+          gte(s.attendance.date, "2026-09-01"),
+          lte(s.attendance.date, "2026-09-30"),
+        ),
+      );
+    expect(before.length).toBeGreaterThan(1);
+
+    await ctx.db.delete(s.uploads);
+    await importDeclining(ctx.db, readFileSync(REGISTER), "newer.xlsx", "2026-09-08");
+
+    const after = await ctx.db
+      .select()
+      .from(s.attendance)
+      .where(
+        and(
+          eq(s.attendance.employeeId, ricardo.id),
+          gte(s.attendance.date, "2026-09-01"),
+          lte(s.attendance.date, "2026-09-30"),
+        ),
+      );
+
+    expect(after).toHaveLength(1);
+    expect(after[0].date).toBe("2026-09-02");
+    expect(after[0].state).toBe("PRESENT");
+  }, 600_000);
+
+  it("writes every removal to the history table", async () => {
+    if (!existsSync(REGISTER) || !existsSync(EARLIER)) return;
+    const ctx = await freshDb();
+    await seedCalendar(ctx.db, 2026, 2026);
+    await importDeclining(ctx.db, readFileSync(EARLIER), "earlier.xlsx", "2026-09-08");
+    await ctx.db.delete(s.uploads);
+    const report = await importDeclining(ctx.db, readFileSync(REGISTER), "newer.xlsx", "2026-09-08");
+
+    const removals = await ctx.db
+      .select()
+      .from(s.attendanceHistory)
+      .where(eq(s.attendanceHistory.newState, "NOT_EMPLOYED"));
+    expect(removals).toHaveLength(report.attendance.removed);
+  }, 600_000);
 });

@@ -10,6 +10,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "../lib/db/schema";
 import { loadEmployeeRows } from "../lib/compliance/load";
 import { VERDICT_ORDER } from "../lib/compliance/rules";
+import { filterRows } from "../lib/compliance/sort";
 
 config({ path: ".env.local" });
 const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
@@ -41,7 +42,10 @@ async function main() {
   const db = drizzle(neon(url!), { schema });
   const rows = await loadEmployeeRows(db, month, asOf);
 
-  const visible = rows.filter((r) => !r.isExempt);
+  // Same filter the web report uses: exempt hidden, and anybody not on that
+  // month's sheet left out.
+  const visible = filterRows(rows, { showExempt: false, onlyProblems: false, query: "" });
+  const offRoster = rows.filter((r) => !r.onRosterThisMonth).length;
   visible.sort(
     (a, b) =>
       VERDICT_ORDER[a.monthly.verdict] - VERDICT_ORDER[b.monthly.verdict] ||
@@ -49,7 +53,10 @@ async function main() {
   );
 
   console.log(`\nCompliance for ${month}, as at ${asOf}`);
-  console.log(`${visible.length} shown · ${rows.length - visible.length} exempt hidden\n`);
+  console.log(
+    `${visible.length} shown · ${rows.filter((r) => r.isExempt && r.onRosterThisMonth).length} exempt hidden` +
+      (offRoster ? ` · ${offRoster} not on this month's sheet` : "") + "\n",
+  );
   console.log(
     "  " + "Name".padEnd(26) + "This month".padEnd(16) + "Two week".padEnd(14) +
     "Long term".padEnd(16) + "Last attended",

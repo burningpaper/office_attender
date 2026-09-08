@@ -15,7 +15,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne, notInArray, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { buildCalendar } from "../calendar/build-calendar";
 import * as s from "../db/schema";
@@ -57,6 +57,8 @@ export type ImportReport = {
     unchanged: number;
     /** Rows whose cell held free text rather than 0/1. */
     explained: number;
+    /** Rows removed because the person is no longer listed for that month. */
+    removed: number;
   };
   reasons: { distinct: number; created: number };
   exemptions: { created: number; needingReview: { name: string; note: string; reason: string }[] };
@@ -137,7 +139,7 @@ export async function importWorkbook(
       addresses: { imported: 0, changed: 0 },
       people: { departed: [], returned: [], addedFromRoster: [] },
       identities: { total: 0, matchedExisting: 0, created: 0, bySimilarity: [], needingReview: [] },
-      attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0 },
+      attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0, removed: 0 },
       reasons: { distinct: 0, created: 0 },
       exemptions: { created: 0, needingReview: [] },
       anomalies: [],
@@ -237,7 +239,7 @@ export async function importWorkbook(
       bySimilarity: identities.filter((i) => i.matchType === "SIMILARITY"),
       needingReview: identities.filter((i) => i.needsReview),
     },
-    attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0 },
+    attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0, removed: 0 },
     reasons: { distinct: distinctReasons.length, created: 0 },
     exemptions: { created: 0, needingReview: exemptionsToConfirm },
     anomalies,
@@ -287,6 +289,38 @@ export async function importWorkbook(
       if (previous === undefined) report.attendance.inserted++;
       else if (previous !== record.state) report.attendance.changed++;
       else report.attendance.unchanged++;
+    }
+
+    /**
+     * What the re-sync would remove.
+     *
+     * A preview that shows only additions is worse than no preview: this is the
+     * one part of an import that destroys data, so it has to be the part you
+     * can see before approving.
+     */
+    for (const sheet of parsed.sheets) {
+      if (!sheet.isDataSheet || !sheet.dateRange) continue;
+
+      const listed = new Set(
+        parsed.employees
+          .filter((row) => row.sheetName === sheet.sheetName)
+          .map((row) => knownIdByRawName.get(row.rawName))
+          .filter((id): id is number => id !== undefined),
+      );
+      if (listed.size === 0) continue;
+
+      const [{ stale }] = await db
+        .select({ stale: sql<number>`count(*)::int` })
+        .from(s.attendance)
+        .where(
+          and(
+            gte(s.attendance.date, sheet.dateRange.start),
+            lte(s.attendance.date, sheet.dateRange.end),
+            notInArray(s.attendance.employeeId, [...listed]),
+            ne(s.attendance.state, "PRESENT"),
+          ),
+        );
+      report.attendance.removed += stale;
     }
 
     return report;
@@ -585,6 +619,80 @@ export async function importWorkbook(
   }
   for (let i = 0; i < historyRows.length; i += CHUNK) {
     await db.insert(s.attendanceHistory).values(historyRows.slice(i, i + CHUNK));
+  }
+
+  /**
+   * A month's sheet is the definitive list of who is tracked that month.
+   *
+   * Upserting alone left people behind: an earlier September tab listed 70
+   * names, the current one lists 54, and the sixteen who came off it kept their
+   * old rows and went on being reported as absent for a month nobody expected
+   * them in. A re-sync has to remove as well as add.
+   *
+   * Every removal is written to the history table first, so the audit trail
+   * still answers "why did this person stop appearing in September?".
+   */
+  for (const sheet of finalParse.sheets) {
+    if (!sheet.isDataSheet || !sheet.dateRange) continue;
+
+    const listed = new Set(
+      finalParse.employees
+        .filter((row) => row.sheetName === sheet.sheetName)
+        .map((row) => idByRawName.get(row.rawName))
+        .filter((id): id is number => id !== undefined),
+    );
+    if (listed.size === 0) continue;
+
+    /**
+     * Never remove a day somebody was actually present.
+     *
+     * If a name comes off a month's sheet but we recorded them in the office
+     * that month, the two disagree, and the attendance is the stronger claim -
+     * somebody wrote down that they were there. Chadley Potgieter came off the
+     * August tab having attended once; that day stays.
+     */
+    const stale = (
+      await db
+        .select({
+          employeeId: s.attendance.employeeId,
+          date: s.attendance.date,
+          state: s.attendance.state,
+        })
+        .from(s.attendance)
+        .where(
+          and(
+            gte(s.attendance.date, sheet.dateRange.start),
+            lte(s.attendance.date, sheet.dateRange.end),
+            notInArray(s.attendance.employeeId, [...listed]),
+          ),
+        )
+    ).filter((row) => row.state !== "PRESENT");
+
+    if (stale.length === 0) continue;
+
+    for (let i = 0; i < stale.length; i += CHUNK) {
+      await db.insert(s.attendanceHistory).values(
+        stale.slice(i, i + CHUNK).map((row) => ({
+          employeeId: row.employeeId,
+          date: row.date,
+          oldState: row.state,
+          newState: "NOT_EMPLOYED" as const,
+          uploadId: upload.id,
+        })),
+      );
+    }
+
+    for (let i = 0; i < stale.length; i += CHUNK) {
+      const batch = stale.slice(i, i + CHUNK);
+      await db.delete(s.attendance).where(
+        sql`(${s.attendance.employeeId}, ${s.attendance.date}) in (${sql.join(
+          batch.map((row) => sql`(${row.employeeId}, ${row.date}::date)`),
+          sql`, `,
+        )})`,
+      );
+    }
+
+    report.attendance.removed += stale.length;
   }
 
   // Employment windows, derived from where each person appears in the sheets.
