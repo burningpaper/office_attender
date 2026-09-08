@@ -95,7 +95,21 @@ export async function importWorkbook(
   db: Db,
   buffer: Buffer,
   filename: string,
-  options: { dryRun?: boolean; resolutions?: AnomalyResolution[]; asOf?: string } = {},
+  options: {
+    dryRun?: boolean;
+    resolutions?: AnomalyResolution[];
+    asOf?: string;
+    /**
+     * Whether to re-derive who has left from the newest sheet.
+     *
+     * Defaults to true. Set false when the workbook's shape has changed and the
+     * newest attendance tab is no longer a reliable roster - the September 2026
+     * file listed 54 people while a separate staff tab listed 56, overlapping
+     * by only 41. Importing attendance is still safe; deciding who has left
+     * from either tab alone would not be.
+     */
+    updateEmploymentStatus?: boolean;
+  } = {},
 ): Promise<ImportReport> {
   const dryRun = options.dryRun ?? false;
   const resolutions = options.resolutions ?? [];
@@ -643,10 +657,12 @@ export async function importWorkbook(
    * month by mistake corrects itself on the next upload rather than needing
    * anybody to remember.
    */
-  const newestSheet = [...finalParse.sheets]
-    .filter((sheet) => sheet.isDataSheet && sheet.dateRange)
-    .sort((a, b) => a.dateRange!.end.localeCompare(b.dateRange!.end))
-    .pop();
+  const newestSheet = (options.updateEmploymentStatus ?? true)
+    ? [...finalParse.sheets]
+        .filter((sheet) => sheet.isDataSheet && sheet.dateRange)
+        .sort((a, b) => a.dateRange!.end.localeCompare(b.dateRange!.end))
+        .pop()
+    : undefined;
 
   if (newestSheet) {
     const onNewestSheet = new Set(
