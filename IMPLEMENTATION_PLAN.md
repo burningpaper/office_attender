@@ -320,8 +320,8 @@ Success Criteria:
 - An office closure applies only to that office; public holidays stay national.
 - Report and emailer pick an office; the emailer cannot mail two offices at once.
 - Existing data ends up on Cape Town with nothing lost.
-Status: **Complete** — 5 new tests (246 total). Cape Town and Johannesburg both exist;
-Johannesburg is empty and waiting for its workbook.
+Status: **Complete** — 5 new tests (246 total). Cape Town and Durban both exist; Durban is
+empty and waiting for its workbook.
 
 Notes from the build:
 - **The re-sync would have deleted the other office's data.** Fenced to the importing
@@ -338,8 +338,13 @@ Notes from the build:
   non-exempt row, which broke as soon as somebody off the month's roster sorted to the
   top. It now takes the largest denominator anyone has.
 
-**To add Johannesburg's data:** `npm run office -- list` to check it exists, then upload
-its workbook at /upload and pick Johannesburg from the office selector.
+**To add Durban's data:** `npm run office -- list` to check it exists, then upload its
+workbook at /upload and pick Durban from the office selector.
+
+Note that "In JHB" is one of the most common absence reasons in the Cape Town data (31
+cells), and Johannesburg is *not* an office in this system. Travel to another office stays
+an explained absence for the office the person belongs to, which is the right behaviour
+whether or not that other office is tracked here.
 
 The dangerous part was the re-sync added in stage 8b. It deletes attendance for anyone not
 listed on a month's sheet, scoped only by date — so a Johannesburg upload would delete

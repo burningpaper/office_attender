@@ -59,6 +59,28 @@ export async function createOffice(
   return office;
 }
 
+/**
+ * Change an office's code or name.
+ *
+ * Safe at any time: everything else refers to offices by id, so renaming does
+ * not move a single employee or attendance row.
+ */
+export async function renameOffice(
+  db: Db,
+  currentCode: string,
+  next: { code?: string; name?: string },
+): Promise<Office | null> {
+  const [office] = await db
+    .update(s.offices)
+    .set({
+      ...(next.code ? { code: next.code.trim().toUpperCase() } : {}),
+      ...(next.name ? { name: next.name.trim() } : {}),
+    })
+    .where(eq(s.offices.code, currentCode.trim().toUpperCase()))
+    .returning({ id: s.offices.id, code: s.offices.code, name: s.offices.name });
+  return office ?? null;
+}
+
 /** Mark a day as closed for one office. */
 export async function closeOffice(
   db: Db,

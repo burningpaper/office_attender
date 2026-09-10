@@ -3,6 +3,7 @@
  *
  *   npm run office -- list
  *   npm run office -- add JHB "Johannesburg"
+ *   npm run office -- rename JHB DBN "Durban"
  *   npm run office -- close CT 2026-07-01 "Office closed"
  */
 import { config } from "dotenv";
@@ -10,7 +11,7 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "../lib/db/schema";
-import { closeOffice, createOffice, listOffices } from "../lib/db/offices";
+import { closeOffice, createOffice, listOffices, renameOffice } from "../lib/db/offices";
 
 config({ path: ".env.local" });
 const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
@@ -28,6 +29,20 @@ async function main() {
     const office = await createOffice(db, code, nameParts.join(" "));
     console.log(`Office ${office.code} (${office.name}) is id ${office.id}.`);
     console.log(`Upload its workbook at /upload and pick "${office.name}".`);
+    return;
+  }
+
+  if (command === "rename") {
+    const [current, code, ...nameParts] = args;
+    if (!current || !code) {
+      throw new Error('Usage: npm run office -- rename <CURRENT_CODE> <NEW_CODE> ["<New name>"]');
+    }
+    const office = await renameOffice(db, current, {
+      code,
+      ...(nameParts.length ? { name: nameParts.join(" ") } : {}),
+    });
+    if (!office) throw new Error(`No office with code ${current}.`);
+    console.log(`Renamed to ${office.code} (${office.name}). Nothing else moved.`);
     return;
   }
 
