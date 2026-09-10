@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
+import { resolveOffice } from "@/lib/db/offices";
 import { loadRecipientList } from "@/lib/email/service";
 import type { EmailCategory } from "@/lib/email/recipients";
 
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "A month is required, as YYYY-MM." }, { status: 400 });
   }
 
-  const list = await loadRecipientList(db, category, month, asOf);
-  return NextResponse.json(list);
+  const office = await resolveOffice(db, url.searchParams.get("office") ?? undefined);
+  const list = await loadRecipientList(db, category, month, asOf, office?.id);
+  return NextResponse.json({ ...list, office });
 }

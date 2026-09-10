@@ -651,3 +651,38 @@ The browser holds the recipient list from page load; the server recomputes it at
 time. When they disagree the intersection can be empty, and the old code answered
 "0 succeeded, 0 failed" — indistinguishable from a dead button, with nothing anywhere to
 inspect. It now says which case it is and suggests a reload.
+
+## 2026-09-10 — A second office
+
+Asked how to approach adding another office, the honest answer was: mostly a field, except
+for one thing that would have destroyed data the first time it was used.
+
+The re-sync built two days earlier deletes attendance for anybody a month's sheet no
+longer lists, scoped only by date. Nobody from Cape Town appears on a Johannesburg sheet,
+so the first Johannesburg upload would have deleted every Cape Town record for those
+months. Not a subtle failure — thousands of rows, silently, on an ordinary Tuesday upload.
+So that was fixed before a second office existed to trigger it, and there is now a test
+that imports the same workbook twice as two different offices and checks the first one
+comes back byte for byte.
+
+Three other things were company-scoped and would have quietly merged the two: employee
+identity and aliases were unique across the whole table, so two people with the same name
+in different cities would have become one person; and employment windows were recomputed
+for everybody on every import, so a Johannesburg upload would have rewritten Cape Town's
+history. All three are now scoped by office.
+
+Closures got their own table. Public holidays are national and stay shared, but shutting
+Cape Town on a Friday says nothing about Johannesburg, and putting both on one calendar
+would excuse the wrong people.
+
+One small decision worth recording: `resolveOffice` falls back to the first office rather
+than to "everybody". Defaulting to all offices would be friendlier on the report and
+dangerous on the emailer, which is one careless click from mailing two cities at once. The
+same helper serves both, so it takes the safe reading.
+
+A display bug surfaced while checking the work: the report header took its required-day
+count from the first non-exempt row, and once somebody off the month's roster sorted to
+the top it announced "0 required days so far" for a month with three. It now takes the
+largest denominator anyone has.
+
+Cape Town carries its 87 people; Johannesburg exists and is empty, waiting for a workbook.

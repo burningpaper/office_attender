@@ -7,7 +7,12 @@ import type { ImportReport } from "@/lib/import/import-workbook";
 
 type Phase = "idle" | "previewing" | "reviewing" | "committing" | "done" | "error";
 
-export function UploadClient() {
+export function UploadClient({
+  offices,
+}: {
+  offices: { id: number; code: string; name: string }[];
+}) {
+  const [office, setOffice] = useState(offices[0]?.code ?? "");
   const [phase, setPhase] = useState<Phase>("idle");
   const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<ImportReport | null>(null);
@@ -23,6 +28,7 @@ export function UploadClient() {
 
     const form = new FormData();
     form.append("file", chosen);
+    form.append("office", office);
 
     try {
       const response = await fetch("/api/import/preview", { method: "POST", body: form });
@@ -46,7 +52,7 @@ export function UploadClient() {
       );
       setPhase("error");
     }
-  }, []);
+  }, [office]);
 
   async function commit() {
     if (!file || !report) return;
@@ -59,6 +65,7 @@ export function UploadClient() {
 
     const form = new FormData();
     form.append("file", file);
+    form.append("office", office);
     form.append("resolutions", JSON.stringify(resolutions));
 
     try {
@@ -90,6 +97,27 @@ export function UploadClient() {
 
   return (
     <div className="flex flex-col gap-6">
+      {offices.length > 1 && (phase === "idle" || phase === "error") && (
+        <label className="flex flex-col gap-1">
+          <span className="text-[0.65rem] uppercase tracking-wide text-subtle">
+            Which office is this workbook for?
+          </span>
+          <select
+            value={office}
+            onChange={(e) => setOffice(e.target.value)}
+            className="w-64 rounded border border-border-soft bg-surface px-2 py-1.5 text-sm transition-colors hover:border-border-strong"
+          >
+            {offices.map((o) => (
+              <option key={o.id} value={o.code}>{o.name}</option>
+            ))}
+          </select>
+          <span className="text-xs text-subtle">
+            An import only ever touches the office it is for. Getting this wrong imports one
+            office&rsquo;s attendance against the other&rsquo;s people.
+          </span>
+        </label>
+      )}
+
       {(phase === "idle" || phase === "error") && (
         <div
           onDragOver={(e) => {

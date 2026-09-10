@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
+import { resolveOffice } from "@/lib/db/offices";
 import { sendCampaign } from "@/lib/email/service";
 import type { EmailCategory } from "@/lib/email/recipients";
 
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
     dryRun?: unknown;
     onlyEmployeeIds?: number[];
     confirm?: string;
+    office?: string;
   };
 
   try {
@@ -62,7 +64,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    const office = await resolveOffice(db, payload.office);
     const result = await sendCampaign(db, {
+      officeId: office?.id,
       category,
       month: payload.month,
       asOf: payload.asOf ?? new Date().toISOString().slice(0, 10),

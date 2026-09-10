@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { importWorkbook } from "@/lib/import/import-workbook";
 import { db } from "@/lib/db/client";
+import { resolveOffice } from "@/lib/db/offices";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,10 +15,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No file was uploaded." }, { status: 400 });
   }
 
+  const office = await resolveOffice(db, form.get("office")?.toString());
+  if (!office) {
+    return NextResponse.json({ error: "No office exists to import into." }, { status: 400 });
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
-    const report = await importWorkbook(db, buffer, file.name, { dryRun: true });
+    const report = await importWorkbook(db, buffer, file.name, {
+      dryRun: true,
+      officeId: office.id,
+    });
     return NextResponse.json(report);
   } catch (error) {
     return NextResponse.json(

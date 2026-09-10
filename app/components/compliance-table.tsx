@@ -38,11 +38,15 @@ export function ComplianceTable({
   month,
   asOf,
   months,
+  offices,
+  officeCode,
 }: {
   rows: EmployeeRowWithDays[];
   month: string;
   asOf: string;
   months: string[];
+  offices: { id: number; code: string; name: string }[];
+  officeCode?: string;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("monthly");
   const [direction, setDirection] = useState<Direction>("asc");
@@ -81,6 +85,8 @@ export function ComplianceTable({
   return (
     <div className="flex flex-col gap-5">
       <Controls
+        offices={offices}
+        officeCode={officeCode}
         month={month}
         months={months}
         asOf={asOf}
@@ -305,6 +311,8 @@ function DayDetail({ row }: { row: EmployeeRowWithDays }) {
 }
 
 function Controls(props: {
+  offices: { id: number; code: string; name: string }[];
+  officeCode?: string;
   month: string;
   months: string[];
   asOf: string;
@@ -324,6 +332,24 @@ function Controls(props: {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="flex flex-wrap items-end gap-3">
+        {props.offices.length > 1 && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.65rem] uppercase tracking-wide text-subtle">Office</span>
+            <select
+              defaultValue={props.officeCode}
+              onChange={(event) => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("office", event.target.value);
+                window.location.href = url.toString();
+              }}
+              className="rounded border border-border-soft bg-surface px-2 py-1.5 text-sm transition-colors hover:border-border-strong"
+            >
+              {props.offices.map((o) => (
+                <option key={o.id} value={o.code}>{o.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1">
           <span className="text-[0.65rem] uppercase tracking-wide text-subtle">Month</span>
           <select

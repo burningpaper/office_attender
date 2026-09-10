@@ -4,7 +4,8 @@ import { ComplianceTable } from "./components/compliance-table";
 import { SignOut } from "./components/sign-out";
 import { loadEmployeeRows } from "@/lib/compliance/load";
 import { db } from "@/lib/db/client";
-import { attendance } from "@/lib/db/schema";
+import { listOffices, resolveOffice } from "@/lib/db/offices";
+import { attendance, employees } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +17,21 @@ function today(): string {
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; asOf?: string }>;
+  searchParams: Promise<{ month?: string; asOf?: string; office?: string }>;
 }) {
   const params = await searchParams;
   const asOf = params.asOf ?? today();
   const month = params.month ?? asOf.slice(0, 7);
 
+  const offices = await listOffices(db);
+  const office = await resolveOffice(db, params.office);
+
   // The months that actually have data, for the picker.
   const monthRows = await db
     .select({ month: sql<string>`to_char(${attendance.date}, 'YYYY-MM')` })
     .from(attendance)
+    .innerJoin(employees, sql`${employees.id} = ${attendance.employeeId}`)
+    .where(office ? sql`${employees.officeId} = ${office.id}` : sql`true`)
     .groupBy(sql`to_char(${attendance.date}, 'YYYY-MM')`)
     .orderBy(sql`to_char(${attendance.date}, 'YYYY-MM')`);
 
@@ -33,7 +39,7 @@ export default async function Page({
   if (!months.includes(month)) months.push(month);
   months.sort();
 
-  const rows = await loadEmployeeRows(db, month, asOf);
+  const rows = await loadEmployeeRows(db, month, asOf, office?.id);
 
   const monthLabel = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-GB", {
     month: "long",
@@ -46,10 +52,16 @@ export default async function Page({
    * top: it is the denominator behind every verdict in the table, and when it
    * is zero the whole column reading "—" stops being alarming.
    */
-  const elapsed = rows.find((r) => !r.isExempt);
-  const elapsedRequired = elapsed
-    ? elapsed.monthly.required + elapsed.monthly.excused
-    : 0;
+  /**
+   * Taken as the largest denominator anyone has, rather than the first row's.
+   *
+   * Picking the first non-exempt person was wrong as soon as somebody off this
+   * month's roster sorted to the top: they have no required days, so the header
+   * announced "0 required days so far" for a month three of them had passed.
+   */
+  const elapsedRequired = rows
+    .filter((r) => !r.isExempt && r.onRosterThisMonth)
+    .reduce((most, r) => Math.max(most, r.monthly.required + r.monthly.excused), 0);
 
   /**
    * The month defaults to the current one, as specified - but on the 1st that
@@ -84,6 +96,7 @@ export default async function Page({
           </div>
         </div>
         <p className="mt-1 text-sm text-muted">
+          {office ? `${office.name} · ` : ""}
           {monthLabel} · Wednesdays and Fridays ·{" "}
           <span className="tabular">
             {elapsedRequired} required day{elapsedRequired === 1 ? "" : "s"} so far
@@ -113,7 +126,14 @@ export default async function Page({
         )}
       </header>
 
-      <ComplianceTable rows={rows} month={month} asOf={asOf} months={months} />
+      <ComplianceTable
+        rows={rows}
+        month={month}
+        asOf={asOf}
+        months={months}
+        offices={offices}
+        officeCode={office?.code}
+      />
 
       <footer className="mt-8 border-t border-border-soft pt-4 text-xs text-subtle">
         <p>

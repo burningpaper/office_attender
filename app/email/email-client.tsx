@@ -15,10 +15,18 @@ const EXCLUSION_LABELS: Record<string, string> = {
   NOT_FAILING: "Not failing this category",
 };
 
-export function EmailClient({ months, month: initialMonth, asOf }: {
+export function EmailClient({
+  months,
+  month: initialMonth,
+  asOf,
+  offices,
+  officeCode,
+}: {
   months: string[];
   month: string;
   asOf: string;
+  offices: { id: number; code: string; name: string }[];
+  officeCode?: string;
 }) {
   const [category, setCategory] = useState<EmailCategory>("MONTHLY");
   const [month, setMonth] = useState(initialMonth);
@@ -43,7 +51,7 @@ export function EmailClient({ months, month: initialMonth, asOf }: {
    */
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ category, month, asOf });
+    const params = new URLSearchParams({ category, month, asOf, ...(officeCode ? { office: officeCode } : {}) });
 
     fetch(`/api/email/recipients?${params}`, { signal: controller.signal })
       .then(async (response) => ({ ok: response.ok, body: await response.json() }))
@@ -67,7 +75,7 @@ export function EmailClient({ months, month: initialMonth, asOf }: {
       });
 
     return () => controller.abort();
-  }, [category, month, asOf]);
+  }, [category, month, asOf, officeCode]);
 
   const selected = useMemo(
     () => (list?.recipients ?? []).filter((r) => !deselected.has(r.employeeId)),
@@ -97,6 +105,7 @@ export function EmailClient({ months, month: initialMonth, asOf }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           category, month, asOf, subject, body, dryRun,
+          ...(officeCode ? { office: officeCode } : {}),
           onlyEmployeeIds: selected.map((r) => r.employeeId),
           ...(dryRun ? {} : { confirm: "SEND" }),
         }),
@@ -145,6 +154,24 @@ export function EmailClient({ months, month: initialMonth, asOf }: {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-wrap items-end gap-3">
+        {offices.length > 1 && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.65rem] uppercase tracking-wide text-subtle">Office</span>
+            <select
+              value={officeCode}
+              onChange={(e) => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("office", e.target.value);
+                window.location.href = url.toString();
+              }}
+              className="rounded border border-border-soft bg-surface px-2 py-1.5 text-sm transition-colors hover:border-border-strong"
+            >
+              {offices.map((o) => (
+                <option key={o.id} value={o.code}>{o.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1">
           <span className="text-[0.65rem] uppercase tracking-wide text-subtle">Who</span>
           <select

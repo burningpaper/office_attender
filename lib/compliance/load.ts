@@ -5,7 +5,7 @@
  * this is the only place that knows about tables.
  */
 
-import { and, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as s from "../db/schema";
 import { evaluateEmployee, requiredDaysFor } from "./rules";
@@ -29,23 +29,36 @@ export async function loadEmployeeRows(
   db: Db,
   month: string,
   asOf: string,
+  /** Restrict to one office. Omitted only by callers that want everybody. */
+  officeId?: number,
 ): Promise<EmployeeRowWithDays[]> {
-  const employees = await db.select().from(s.employees);
+  const employees = officeId
+    ? await db.select().from(s.employees).where(eq(s.employees.officeId, officeId))
+    : await db.select().from(s.employees);
   const exemptions = await db.select().from(s.exemptions);
 
   /**
    * Attendance is loaded for the whole history, not just the month: long-term
    * compliance averages over every complete month a person has worked.
    */
-  const attendance = await db
-    .select({
-      employeeId: s.attendance.employeeId,
-      date: s.attendance.date,
-      state: s.attendance.state,
-      rawValue: s.attendance.rawValue,
-      reasonId: s.attendance.reasonId,
-    })
-    .from(s.attendance);
+  /**
+   * Only this office's attendance. Loading everybody's and filtering later
+   * would work, but the day-detail maps are built from this and would quietly
+   * carry another office's rows.
+   */
+  const employeeIds = employees.map((e) => e.id);
+  const attendance = employeeIds.length
+    ? await db
+        .select({
+          employeeId: s.attendance.employeeId,
+          date: s.attendance.date,
+          state: s.attendance.state,
+          rawValue: s.attendance.rawValue,
+          reasonId: s.attendance.reasonId,
+        })
+        .from(s.attendance)
+        .where(inArray(s.attendance.employeeId, employeeIds))
+    : [];
 
   const reasonRows = await db.select().from(s.reasons);
   const reasonById = new Map(reasonRows.map((r) => [r.id, r]));
@@ -59,7 +72,24 @@ export async function loadEmployeeRows(
     .from(s.calendarDays)
     .where(and(gte(s.calendarDays.date, "2020-01-01"), lte(s.calendarDays.date, "2100-01-01")));
 
-  const calendar: CalendarDay[] = calendarRows;
+  /**
+   * A closure applies to one office, so it is applied here rather than baked
+   * into the shared calendar - the same Friday can be a working day in one
+   * city and a shut door in another.
+   */
+  const closures = officeId
+    ? await db
+        .select({ date: s.officeClosures.date })
+        .from(s.officeClosures)
+        .where(eq(s.officeClosures.officeId, officeId))
+    : [];
+  const closed = new Set(closures.map((c) => c.date));
+
+  const calendar: CalendarDay[] = calendarRows.map((day) =>
+    closed.has(day.date)
+      ? { ...day, isRequiredDay: false, label: day.label ?? "Office closed" }
+      : day,
+  );
 
   const attendanceByEmployee = new Map<number, Map<string, AttendanceState>>();
   const detailByEmployee = new Map<number, Map<string, (typeof attendance)[number]>>();

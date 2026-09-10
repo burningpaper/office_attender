@@ -18,11 +18,16 @@ export async function loadRecipientList(
   category: EmailCategory,
   month: string,
   asOf: string,
+  /** Required in practice: mailing two offices at once is never intended. */
+  officeId?: number,
 ): Promise<RecipientList> {
-  const rows = await loadEmployeeRows(db, month, asOf);
-  const people = await db
-    .select({ id: s.employees.id, email: s.employees.email })
-    .from(s.employees);
+  const rows = await loadEmployeeRows(db, month, asOf, officeId);
+  const people = officeId
+    ? await db
+        .select({ id: s.employees.id, email: s.employees.email })
+        .from(s.employees)
+        .where(eq(s.employees.officeId, officeId))
+    : await db.select({ id: s.employees.id, email: s.employees.email }).from(s.employees);
 
   const emailByEmployeeId = new Map<number, string>();
   for (const person of people) {
@@ -67,6 +72,7 @@ export async function sendCampaign(
     subject: string;
     body: string;
     dryRun: boolean;
+    officeId?: number;
     /** Only these employees, when the operator has deselected some. */
     onlyEmployeeIds?: number[];
   },
@@ -79,7 +85,9 @@ export async function sendCampaign(
     );
   }
 
-  const { recipients } = await loadRecipientList(db, input.category, input.month, input.asOf);
+  const { recipients } = await loadRecipientList(
+    db, input.category, input.month, input.asOf, input.officeId,
+  );
   const chosen = input.onlyEmployeeIds
     ? recipients.filter((r) => input.onlyEmployeeIds!.includes(r.employeeId))
     : recipients;

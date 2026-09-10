@@ -320,9 +320,28 @@ Success Criteria:
 - An office closure applies only to that office; public holidays stay national.
 - Report and emailer pick an office; the emailer cannot mail two offices at once.
 - Existing data ends up on Cape Town with nothing lost.
-Status: In Progress
+Status: **Complete** — 5 new tests (246 total). Cape Town and Johannesburg both exist;
+Johannesburg is empty and waiting for its workbook.
 
-The dangerous part is the re-sync added in stage 8b. It deletes attendance for anyone not
+Notes from the build:
+- **The re-sync would have deleted the other office's data.** Fenced to the importing
+  office, with a test that imports the same workbook as two offices and checks the first
+  survives byte for byte.
+- Identity is unique per office now, not per company. The same workbook imported as two
+  offices produces two Zoe Flanegans, which is correct.
+- Closures live in their own table and are folded into the calendar per office; public
+  holidays stay national and shared.
+- `resolveOffice` falls back to the *first* office rather than to "all", because both
+  views that use it are safer scoped — an emailer defaulting to every office would be one
+  careless click from mailing two cities at once.
+- Found a display bug on the way: the header took its required-day count from the first
+  non-exempt row, which broke as soon as somebody off the month's roster sorted to the
+  top. It now takes the largest denominator anyone has.
+
+**To add Johannesburg's data:** `npm run office -- list` to check it exists, then upload
+its workbook at /upload and pick Johannesburg from the office selector.
+
+The dangerous part was the re-sync added in stage 8b. It deletes attendance for anyone not
 listed on a month's sheet, scoped only by date — so a Johannesburg upload would delete
 every Cape Town record for those months. That is fixed first, before a second office can
 exist to trigger it.

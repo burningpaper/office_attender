@@ -1,9 +1,15 @@
 import Link from "next/link";
 import { UploadClient } from "./upload-client";
+import { db } from "@/lib/db/client";
+import { listOffices } from "@/lib/db/offices";
 
 export const metadata = { title: "Upload · Office Attendance" };
 
-export default function UploadPage() {
+export const dynamic = "force-dynamic";
+
+export default async function UploadPage() {
+  const offices = await listOffices(db);
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       <header className="mb-7">
@@ -14,7 +20,7 @@ export default function UploadPage() {
         </p>
       </header>
 
-      <UploadClient />
+      <UploadClient offices={offices} />
 
       <footer className="mt-8 border-t border-border-soft pt-4 text-xs text-subtle">
         <p>

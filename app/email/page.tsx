@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { EmailClient } from "./email-client";
 import { db } from "@/lib/db/client";
+import { listOffices, resolveOffice } from "@/lib/db/offices";
 import { attendance, employees } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +11,18 @@ export const metadata = { title: "Email · Office Attendance" };
 export default async function EmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; asOf?: string }>;
+  searchParams: Promise<{ month?: string; asOf?: string; office?: string }>;
 }) {
   const params = await searchParams;
   const asOf = params.asOf ?? new Date().toISOString().slice(0, 10);
+  const offices = await listOffices(db);
+  const office = await resolveOffice(db, params.office);
 
   const monthRows = await db
     .select({ month: sql<string>`to_char(${attendance.date}, 'YYYY-MM')` })
     .from(attendance)
+    .innerJoin(employees, sql`${employees.id} = ${attendance.employeeId}`)
+    .where(office ? sql`${employees.officeId} = ${office.id}` : sql`true`)
     .groupBy(sql`to_char(${attendance.date}, 'YYYY-MM')`)
     .orderBy(sql`to_char(${attendance.date}, 'YYYY-MM')`);
   const months = monthRows.map((r) => r.month);
@@ -34,13 +39,19 @@ export default async function EmailPage({
       total: sql<number>`count(*)::int`,
       withEmail: sql<number>`count(${employees.email})::int`,
     })
-    .from(employees);
+    .from(employees)
+    .where(office ? sql`${employees.officeId} = ${office.id}` : sql`true`);
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
       <header className="mb-7">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Email non-compliant people</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Email non-compliant people
+            {office && offices.length > 1 && (
+              <span className="ml-2 text-sm font-normal text-muted">{office.name}</span>
+            )}
+          </h1>
           <nav className="flex gap-2 text-sm">
             <Link href="/" className="rounded border border-border-soft px-2.5 py-1.5 text-muted transition-colors hover:border-border-strong hover:text-foreground">
               Report
@@ -71,7 +82,13 @@ export default async function EmailPage({
           <Link href="/upload" className="underline underline-offset-2">Upload a workbook</Link> first.
         </p>
       ) : (
-        <EmailClient months={months} month={month} asOf={asOf} />
+        <EmailClient
+          months={months}
+          month={month}
+          asOf={asOf}
+          offices={offices}
+          officeCode={office?.code}
+        />
       )}
 
       <footer className="mt-8 border-t border-border-soft pt-4 text-xs text-subtle">
