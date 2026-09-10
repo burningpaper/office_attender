@@ -113,11 +113,26 @@ export async function importWorkbook(
      * from either tab alone would not be.
      */
     updateEmploymentStatus?: boolean;
+    /**
+     * Which office this workbook belongs to.
+     *
+     * Scopes everything the import touches. Without it the re-sync would delete
+     * one office's attendance while importing another's, because nobody from
+     * Cape Town appears on a Johannesburg sheet.
+     */
+    officeId?: number;
   } = {},
 ): Promise<ImportReport> {
   const dryRun = options.dryRun ?? false;
   const resolutions = options.resolutions ?? [];
   const asOf = options.asOf ?? new Date().toISOString().slice(0, 10);
+
+  const officeId =
+    options.officeId ??
+    (await db.select({ id: s.offices.id }).from(s.offices).orderBy(s.offices.id).limit(1))[0]?.id;
+  if (officeId === undefined) {
+    throw new Error("No office exists to import into. Create one first.");
+  }
   const sha256 = hashBuffer(buffer);
 
   // An identical file is a no-op. Re-uploading must never duplicate anything.
@@ -161,12 +176,27 @@ export async function importWorkbook(
       normalisedKey: s.employees.normalisedKey,
       displayName: s.employees.displayName,
     })
-    .from(s.employees);
+    .from(s.employees)
+    .where(eq(s.employees.officeId, officeId));
 
+  /**
+   * Aliases are read through the employee table so they inherit the office
+   * filter. A spelling that means one person in Cape Town must not resolve to
+   * somebody else in Johannesburg.
+   */
   const aliasRows = await db
     .select({ rawName: s.employeeAliases.rawName, employeeId: s.employeeAliases.employeeId })
-    .from(s.employeeAliases);
-  const knownAliases = new Map(aliasRows.map((a) => [a.rawName, a.employeeId]));
+    .from(s.employeeAliases)
+    .innerJoin(s.employees, eq(s.employees.id, s.employeeAliases.employeeId))
+    .where(eq(s.employees.officeId, officeId));
+  const knownAliases = new Map(
+    aliasRows.map((a) => [
+      (a as unknown as { employee_aliases: { rawName: string; employeeId: number } })
+        .employee_aliases?.rawName ?? (a as { rawName: string }).rawName,
+      (a as unknown as { employee_aliases: { rawName: string; employeeId: number } })
+        .employee_aliases?.employeeId ?? (a as { employeeId: number }).employeeId,
+    ]),
+  );
 
   const identities = resolveIdentities(parsed.employees, knownEmployees, knownAliases);
 
@@ -258,6 +288,13 @@ export async function importWorkbook(
      * Employees who do not exist yet obviously have nothing to compare against,
      * so everything of theirs counts as new.
      */
+    const officeIdsForCounting = (
+      await db
+        .select({ id: s.employees.id })
+        .from(s.employees)
+        .where(eq(s.employees.officeId, officeId))
+    ).map((row) => row.id);
+
     const knownIdByRawName = new Map<string, number>();
     for (const identity of identities) {
       if (identity.employeeId !== undefined) {
@@ -316,6 +353,7 @@ export async function importWorkbook(
           and(
             gte(s.attendance.date, sheet.dateRange.start),
             lte(s.attendance.date, sheet.dateRange.end),
+            inArray(s.attendance.employeeId, officeIdsForCounting),
             notInArray(s.attendance.employeeId, [...listed]),
             ne(s.attendance.state, "PRESENT"),
           ),
@@ -392,6 +430,7 @@ export async function importWorkbook(
   const [upload] = await db
     .insert(s.uploads)
     .values({
+      officeId,
       filename,
       sha256,
       status: "PENDING",
@@ -427,6 +466,7 @@ export async function importWorkbook(
     if (idByCanonicalKey.has(identity.canonicalKey)) continue;
     if (toCreate.has(identity.canonicalKey)) continue;
     toCreate.set(identity.canonicalKey, {
+      officeId,
       firstName: identity.firstName,
       lastName: identity.lastName,
       displayName: identity.displayName,
@@ -439,7 +479,7 @@ export async function importWorkbook(
       .insert(s.employees)
       .values([...toCreate.values()])
       .onConflictDoUpdate({
-        target: s.employees.normalisedKey,
+        target: [s.employees.officeId, s.employees.normalisedKey],
         set: { updatedAt: new Date() },
       })
       .returning({ id: s.employees.id, normalisedKey: s.employees.normalisedKey });
@@ -632,6 +672,19 @@ export async function importWorkbook(
    * Every removal is written to the history table first, so the audit trail
    * still answers "why did this person stop appearing in September?".
    */
+  /**
+   * The fence. Removal is confined to this office's people, so importing one
+   * office's workbook can never touch another's records - nobody from Cape Town
+   * appears on a Johannesburg sheet, and without this every one of them would
+   * look like somebody who had come off it.
+   */
+  const officeEmployeeIds = (
+    await db
+      .select({ id: s.employees.id })
+      .from(s.employees)
+      .where(eq(s.employees.officeId, officeId))
+  ).map((row) => row.id);
+
   for (const sheet of finalParse.sheets) {
     if (!sheet.isDataSheet || !sheet.dateRange) continue;
 
@@ -663,6 +716,7 @@ export async function importWorkbook(
           and(
             gte(s.attendance.date, sheet.dateRange.start),
             lte(s.attendance.date, sheet.dateRange.end),
+            inArray(s.attendance.employeeId, officeEmployeeIds),
             notInArray(s.attendance.employeeId, [...listed]),
           ),
         )
@@ -705,7 +759,7 @@ export async function importWorkbook(
       select employee_id, min(date) as first_seen, max(date) as last_seen
       from attendance group by employee_id
     ) w
-    where w.employee_id = e.id
+    where w.employee_id = e.id and e.office_id = ${officeId}
   `);
 
   /**
@@ -801,17 +855,9 @@ export async function importWorkbook(
           normalisedKey: s.employees.normalisedKey,
           displayName: s.employees.displayName,
         })
-        .from(s.employees),
-      new Map(
-        (
-          await db
-            .select({
-              rawName: s.employeeAliases.rawName,
-              employeeId: s.employeeAliases.employeeId,
-            })
-            .from(s.employeeAliases)
-        ).map((a) => [a.rawName, a.employeeId]),
-      ),
+        .from(s.employees)
+        .where(eq(s.employees.officeId, officeId)),
+      knownAliases,
     );
 
     const onRoster = new Set<number>();
@@ -822,13 +868,14 @@ export async function importWorkbook(
         const [created] = await db
           .insert(s.employees)
           .values({
+            officeId,
             firstName: identity.firstName,
             lastName: identity.lastName,
             displayName: identity.displayName,
             normalisedKey: identity.canonicalKey,
           })
           .onConflictDoUpdate({
-            target: s.employees.normalisedKey,
+            target: [s.employees.officeId, s.employees.normalisedKey],
             set: { updatedAt: new Date() },
           })
           .returning();
@@ -874,7 +921,8 @@ export async function importWorkbook(
         status: s.employees.status,
         lastSeenDate: s.employees.lastSeenDate,
       })
-      .from(s.employees);
+      .from(s.employees)
+      .where(eq(s.employees.officeId, officeId));
 
     const nowDeparted = everyone.filter(
       (p) => !employed.has(p.id) && p.status !== "DEPARTED",
@@ -925,7 +973,8 @@ export async function importWorkbook(
         status: s.employees.status,
         lastSeenDate: s.employees.lastSeenDate,
       })
-      .from(s.employees);
+      .from(s.employees)
+      .where(eq(s.employees.officeId, officeId));
 
     const nowDeparted = everyone.filter(
       (person) => !onNewestSheet.has(person.id) && person.status !== "DEPARTED",

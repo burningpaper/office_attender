@@ -15,6 +15,7 @@ beforeEach(async () => {
 });
 
 const anEmployee = {
+  officeId: 1,
   firstName: "Test",
   lastName: "Person",
   displayName: "Test Person",
@@ -35,6 +36,8 @@ describe("migrations", () => {
       "employee_aliases",
       "employees",
       "exemptions",
+      "office_closures",
+      "offices",
       "reasons",
       "uploads",
     ]);
@@ -143,7 +146,7 @@ describe("constraints", () => {
     );
   });
 
-  it("rejects two employees sharing a normalised key", async () => {
+  it("rejects two employees sharing a normalised key in the same office", async () => {
     // This is what stops "zoe Flanegan" and "Zoe Flanegan" becoming two people.
     await ctx.db.insert(s.employees).values(anEmployee);
     await expectPgError(
@@ -168,7 +171,7 @@ describe("constraints", () => {
   });
 
   it("rejects re-uploading an identical file", async () => {
-    const upload = { filename: "attendance.xlsx", sha256: "abc123" };
+    const upload = { officeId: 1, filename: "attendance.xlsx", sha256: "abc123" };
     await ctx.db.insert(s.uploads).values(upload);
     await expectPgError(
       ctx.db.insert(s.uploads).values({ ...upload, filename: "renamed.xlsx" }),
@@ -190,7 +193,7 @@ describe("constraints", () => {
   it("keeps history when the upload that caused it is deleted", async () => {
     // History is the audit trail; losing it with an upload would defeat it.
     const [emp] = await ctx.db.insert(s.employees).values(anEmployee).returning();
-    const [up] = await ctx.db.insert(s.uploads).values({ filename: "f.xlsx", sha256: "z" }).returning();
+    const [up] = await ctx.db.insert(s.uploads).values({ officeId: 1, filename: "f.xlsx", sha256: "z" }).returning();
     await ctx.db.insert(s.attendanceHistory).values({
       employeeId: emp.id, date: "2026-03-04", oldState: "ABSENT", newState: "PRESENT", uploadId: up.id,
     });
@@ -203,8 +206,8 @@ describe("constraints", () => {
 
   it("enforces the enum vocabularies", async () => {
     await expectPgError(
-      ctx.client.exec(`insert into employees (first_name, display_name, normalised_key, status)
-                       values ('A','A','a','RESIGNED')`),
+      ctx.client.exec(`insert into employees (office_id, first_name, display_name, normalised_key, status)
+                       values (1,'A','A','a','RESIGNED')`),
       PG.INVALID_ENUM_VALUE,
     );
   });

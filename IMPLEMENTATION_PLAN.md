@@ -306,3 +306,28 @@ Notes from the build:
   lax, and secure in production. Password comparison is constant-time.
 - The login `next` parameter only ever redirects within the app — an open redirect there
   would make a link that looks like ours land somewhere that is not.
+
+## Stage 9: A second office
+Goal: Track more than one office, each with its own staff list and workbook, without
+either one's data touching the other.
+Decisions taken (2026-09-09): one home office per person — visiting another office stays
+an explained absence, exactly as "In JHB" works today. The report and emailer show one
+office at a time, chosen with a picker.
+
+Success Criteria:
+- Uploading one office's workbook cannot alter another office's attendance.
+- Two people with the same name in different offices stay two people.
+- An office closure applies only to that office; public holidays stay national.
+- Report and emailer pick an office; the emailer cannot mail two offices at once.
+- Existing data ends up on Cape Town with nothing lost.
+Status: In Progress
+
+The dangerous part is the re-sync added in stage 8b. It deletes attendance for anyone not
+listed on a month's sheet, scoped only by date — so a Johannesburg upload would delete
+every Cape Town record for those months. That is fixed first, before a second office can
+exist to trigger it.
+
+Also globally scoped and needing office boundaries: `employees.normalised_key` and
+`employee_aliases.raw_name` are unique across the whole table, so same-named people in
+different offices would merge; and `OFFICE_CLOSED` sits on the shared calendar, so closing
+one office would excuse the other. Public holidays are national and stay shared.

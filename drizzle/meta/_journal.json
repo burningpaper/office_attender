@@ -15,6 +15,13 @@
       "when": 1788263310581,
       "tag": "0001_emailer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789028845943,
+      "tag": "0002_offices",
+      "breakpoints": true
     }
   ]
 }

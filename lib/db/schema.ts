@@ -104,6 +104,53 @@ export const uploadStatus = pgEnum("upload_status", [
 ]);
 
 // ---------------------------------------------------------------------------
+// Offices
+// ---------------------------------------------------------------------------
+
+/**
+ * Each office keeps its own staff list and its own workbook.
+ *
+ * Almost everything else in the schema hangs off this: attendance is imported
+ * per office, identity is resolved within an office, and closures apply to one
+ * office rather than the company. The compliance rules are the only thing that
+ * does not care - Wednesday and Friday are Wednesday and Friday everywhere.
+ */
+export const offices = pgTable(
+  "offices",
+  {
+    id: serial("id").primaryKey(),
+    /** Short form used in filenames and the interface: CT, JHB. */
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("offices_code_key").on(t.code)],
+);
+
+/**
+ * A day one office was shut.
+ *
+ * Separate from calendar_days because public holidays are national and shared,
+ * while a closure is local: shutting Cape Town on a Friday says nothing about
+ * Johannesburg, and putting both on one table would excuse the wrong people.
+ */
+export const officeClosures = pgTable(
+  "office_closures",
+  {
+    officeId: integer("office_id")
+      .notNull()
+      .references(() => offices.id, { onDelete: "cascade" }),
+    date: date("date")
+      .notNull()
+      .references(() => calendarDays.date),
+    label: text("label"),
+    confirmedByHuman: boolean("confirmed_by_human").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.officeId, t.date] })],
+);
+
+// ---------------------------------------------------------------------------
 // Calendar - the compliance denominator
 // ---------------------------------------------------------------------------
 
@@ -130,6 +177,10 @@ export const uploads = pgTable(
   "uploads",
   {
     id: serial("id").primaryKey(),
+    /** Which office's workbook this is. Scopes everything the import touches. */
+    officeId: integer("office_id")
+      .notNull()
+      .references(() => offices.id),
     filename: text("filename").notNull(),
     /** Re-uploading an identical file is a no-op rather than a duplicate run. */
     sha256: text("sha256").notNull(),
@@ -152,6 +203,9 @@ export const employees = pgTable(
   "employees",
   {
     id: serial("id").primaryKey(),
+    officeId: integer("office_id")
+      .notNull()
+      .references(() => offices.id),
     firstName: text("first_name").notNull(),
     lastName: text("last_name").notNull().default(""),
     displayName: text("display_name").notNull(),
@@ -178,7 +232,11 @@ export const employees = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("employees_normalised_key_key").on(t.normalisedKey)],
+  /**
+   * Unique within an office, not across the company. Two people called Jason
+   * Tucker in different cities are two people.
+   */
+  (t) => [uniqueIndex("employees_office_key").on(t.officeId, t.normalisedKey)],
 );
 
 /**
@@ -199,7 +257,12 @@ export const employeeAliases = pgTable(
     confirmedByHuman: boolean("confirmed_by_human").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("employee_aliases_raw_name_key").on(t.rawName)],
+  /**
+   * One spelling per person rather than one per company - the same spelling can
+   * legitimately belong to two people in two offices. Resolution is scoped to
+   * the office being imported, so it stays unambiguous where it matters.
+   */
+  (t) => [uniqueIndex("employee_aliases_employee_raw_name_key").on(t.employeeId, t.rawName)],
 );
 
 /**

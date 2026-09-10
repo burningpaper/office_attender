@@ -32,7 +32,14 @@ export async function freshDb() {
     }
   }
 
-  return { db, client, migrationCount: files.length };
+  /**
+   * Every fixture needs an office to hang off. The migration already creates
+   * Cape Town as part of its backfill, so take that one rather than making a
+   * second - which is also what production looks like.
+   */
+  const [office] = await db.select().from(schema.offices).limit(1);
+
+  return { db, client, office, officeId: office.id, migrationCount: files.length };
 }
 
 /**
@@ -88,11 +95,12 @@ export async function importDeclining(
   buffer: Buffer,
   filename: string,
   asOf = "2026-09-01",
+  officeId = 1,
 ) {
   const { importWorkbook } = await import("../../import/import-workbook");
-  const preview = await importWorkbook(db, buffer, filename, { dryRun: true, asOf });
+  const preview = await importWorkbook(db, buffer, filename, { dryRun: true, asOf, officeId });
   const resolutions = preview.anomalies
     .filter((a) => a.blocking)
     .map((a) => ({ id: a.id, accept: false }));
-  return importWorkbook(db, buffer, filename, { resolutions, asOf });
+  return importWorkbook(db, buffer, filename, { resolutions, asOf, officeId });
 }
