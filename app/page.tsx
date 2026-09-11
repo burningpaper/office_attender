@@ -81,6 +81,12 @@ export default async function Page({
           <h1 className="text-xl font-semibold tracking-tight">Office attendance</h1>
           <div className="flex gap-2">
           <Link
+            href="/register"
+            className="rounded border border-border-strong px-2.5 py-1.5 text-sm transition-colors hover:bg-surface-muted"
+          >
+            Register
+          </Link>
+          <Link
             href="/email"
             className="rounded border border-border-soft px-2.5 py-1.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-foreground"
           >

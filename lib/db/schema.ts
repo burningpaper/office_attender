@@ -96,6 +96,16 @@ export const emailSendStatus = pgEnum("email_send_status", [
   "SKIPPED",
 ]);
 
+/**
+ * Where a day's record came from.
+ *
+ * Worth recording because the two sources have different authority. Somebody
+ * ticking a box in the register screen is looking at the office; a spreadsheet
+ * re-uploaded weeks later is a copy of what somebody once thought. When they
+ * disagree, the hand-entered one wins - see the importer.
+ */
+export const attendanceSource = pgEnum("attendance_source", ["IMPORT", "MANUAL"]);
+
 export const uploadStatus = pgEnum("upload_status", [
   "PENDING",
   "PREVIEWED",
@@ -335,8 +345,16 @@ export const attendance = pgTable(
       .notNull()
       .references(() => calendarDays.date),
     state: attendanceState("state").notNull(),
+    source: attendanceSource("source").notNull().default("IMPORT"),
     /** Exactly what the cell held. Never normalised away. */
     rawValue: text("raw_value"),
+    /**
+     * A note typed by whoever kept the register, explaining an absence.
+     *
+     * Distinct from reasonId: that points at a shared, classified string from
+     * the old spreadsheets, while this is what one person wrote about one day.
+     */
+    comment: text("comment"),
     reasonId: integer("reason_id").references(() => reasons.id, { onDelete: "set null" }),
     sourceUploadId: integer("source_upload_id").references(() => uploads.id, {
       onDelete: "set null",

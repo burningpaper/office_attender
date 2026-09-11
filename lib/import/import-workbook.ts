@@ -59,6 +59,8 @@ export type ImportReport = {
     explained: number;
     /** Rows removed because the person is no longer listed for that month. */
     removed: number;
+    /** Hand-entered days an import declined to overwrite. */
+    manualKept: number;
   };
   reasons: { distinct: number; created: number };
   exemptions: { created: number; needingReview: { name: string; note: string; reason: string }[] };
@@ -154,7 +156,7 @@ export async function importWorkbook(
       addresses: { imported: 0, changed: 0 },
       people: { departed: [], returned: [], addedFromRoster: [] },
       identities: { total: 0, matchedExisting: 0, created: 0, bySimilarity: [], needingReview: [] },
-      attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0, removed: 0 },
+      attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0, removed: 0, manualKept: 0 },
       reasons: { distinct: 0, created: 0 },
       exemptions: { created: 0, needingReview: [] },
       anomalies: [],
@@ -269,7 +271,7 @@ export async function importWorkbook(
       bySimilarity: identities.filter((i) => i.matchType === "SIMILARITY"),
       needingReview: identities.filter((i) => i.needsReview),
     },
-    attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0, removed: 0 },
+    attendance: { inserted: 0, changed: 0, unchanged: 0, explained: 0, removed: 0, manualKept: 0 },
     reasons: { distinct: distinctReasons.length, created: 0 },
     exemptions: { created: 0, needingReview: exemptionsToConfirm },
     anomalies,
@@ -583,12 +585,25 @@ export async function importWorkbook(
           employeeId: s.attendance.employeeId,
           date: s.attendance.date,
           state: s.attendance.state,
+          source: s.attendance.source,
         })
         .from(s.attendance)
         .where(inArray(s.attendance.employeeId, employeeIds))
     : [];
   const currentState = new Map(
     currentRows.map((r) => [`${r.employeeId}|${r.date}`, r.state]),
+  );
+
+  /**
+   * Days somebody entered by hand.
+   *
+   * An import never overwrites these. The register screen is filled in by a
+   * person looking at the office that week; a spreadsheet uploaded afterwards
+   * is a copy of what somebody once thought. Re-uploading an old workbook
+   * should not quietly undo this week's register.
+   */
+  const manualKeys = new Set(
+    currentRows.filter((r) => r.source === "MANUAL").map((r) => `${r.employeeId}|${r.date}`),
   );
 
   /**
@@ -612,6 +627,12 @@ export async function importWorkbook(
   for (const [key, record] of merged) {
     const [employeeIdText, date] = key.split("|");
     const employeeId = Number(employeeIdText);
+
+    if (manualKeys.has(key)) {
+      report.attendance.manualKept++;
+      continue;
+    }
+
     const previous = currentState.get(key);
 
     if (previous === undefined) report.attendance.inserted++;
@@ -710,6 +731,7 @@ export async function importWorkbook(
           employeeId: s.attendance.employeeId,
           date: s.attendance.date,
           state: s.attendance.state,
+          source: s.attendance.source,
         })
         .from(s.attendance)
         .where(
@@ -720,7 +742,7 @@ export async function importWorkbook(
             notInArray(s.attendance.employeeId, [...listed]),
           ),
         )
-    ).filter((row) => row.state !== "PRESENT");
+    ).filter((row) => row.state !== "PRESENT" && row.source !== "MANUAL");
 
     if (stale.length === 0) continue;
 

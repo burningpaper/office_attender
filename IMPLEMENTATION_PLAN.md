@@ -355,3 +355,37 @@ Also globally scoped and needing office boundaries: `employees.normalised_key` a
 `employee_aliases.raw_name` are unique across the whole table, so same-named people in
 different offices would merge; and `OFFICE_CLOSED` sits on the shared calendar, so closing
 one office would excuse the other. Public holidays are national and stay shared.
+
+## Stage 10: Keeping the register in the app
+Goal: Stop the spreadsheet being the way attendance arrives. Upload a staff list per
+office, then tick a weekly register directly.
+Status: **Complete** — 32 new tests (278 total).
+
+What it replaces: 2,641 lines of parsing, identity resolution, anomaly detection and reason
+classification existed only because the input was a workbook somebody edited by hand. New
+data no longer goes through any of it. The importer stays for the history it brought in,
+and as a fallback.
+
+Notes from the build:
+- **Only Wednesdays and Fridays appear.** The old sheets recorded all five weekdays and the
+  system discarded three of them, which is a lot of ticking for nothing. A week is two
+  columns.
+- **Public holidays and closures cannot be ticked** — they show the reason instead. The
+  calendar work already decided nobody is absent on a day the office was shut; the register
+  should not invite somebody to record it by hand.
+- **Saved as you go, one cell per request.** No save button, because a register is filled
+  in while somebody looks around the office and a button is a thing to forget. One request
+  per cell keeps a failure local to one person's day.
+- **A comment marks the week, not the day.** The reasons people give are almost always
+  about the week — "on leave", "in Durban" — and asking for the same sentence twice is how
+  a register stops being filled in.
+- **An import never overwrites a hand-entered day.** The register is filled in by somebody
+  looking at the office; a spreadsheet uploaded later is a copy of what somebody once
+  thought. `attendance.source` records which, and the importer reports how many it left
+  alone.
+- Comments offer the reasons already in use as suggestions. "On leave", "On Leave" and
+  "on leave" became three separate things last time; this is the cheapest way to stop it.
+
+**Still to decide:** individual logins. There is one shared password, so "who recorded
+this" cannot be answered yet. That matters more now that several people in two cities will
+be entering data.

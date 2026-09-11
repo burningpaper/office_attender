@@ -9,7 +9,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as s from "../../db/schema";
 import { freshDb, importDeclining } from "../../db/__tests__/helpers";
