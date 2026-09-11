@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   SESSION_DURATION_SECONDS,
+  SESSION_RENEW_AFTER_SECONDS,
   constantTimeEquals,
   createSessionToken,
   isPublicPath,
+  readSessionToken,
   verifySessionToken,
 } from "../session";
 
@@ -52,6 +54,62 @@ describe("session tokens", () => {
     for (const bad of [undefined, "", "no-dot", "a.b.c", "....", "%%%.%%%"]) {
       expect(await verifySessionToken(bad, SECRET), String(bad)).toBe(false);
     }
+  });
+});
+
+describe("staying signed in", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it("lasts a month rather than a working day", () => {
+    // Twelve hours meant signing in every morning, which is the kind of
+    // friction that gets a password written on a sticky note.
+    expect(SESSION_DURATION_SECONDS).toBe(30 * 24 * 60 * 60);
+  });
+
+  it("does not ask for a refresh while the session is young", async () => {
+    const issued = Date.now();
+    const token = await createSessionToken(SECRET, issued);
+    const state = await readSessionToken(token, SECRET, issued + DAY);
+    expect(state).toMatchObject({ valid: true, shouldRenew: false });
+  });
+
+  it("asks for a refresh once past halfway", async () => {
+    const issued = Date.now();
+    const token = await createSessionToken(SECRET, issued);
+    const past = issued + (SESSION_RENEW_AFTER_SECONDS + 60) * 1000;
+    expect(await readSessionToken(token, SECRET, past)).toMatchObject({
+      valid: true,
+      shouldRenew: true,
+    });
+  });
+
+  it("keeps somebody signed in indefinitely if they keep using it", async () => {
+    /**
+     * Simulates a year of weekly use: each visit that is past halfway hands
+     * back a fresh token, so the window never runs out.
+     */
+    let token = await createSessionToken(SECRET, Date.now());
+    let now = Date.now();
+
+    for (let week = 0; week < 52; week++) {
+      now += 7 * DAY;
+      const state = await readSessionToken(token, SECRET, now);
+      expect(state.valid, `week ${week}`).toBe(true);
+      if (state.valid && state.shouldRenew) token = await createSessionToken(SECRET, now);
+    }
+  });
+
+  it("still expires a session nobody comes back to", async () => {
+    const issued = Date.now();
+    const token = await createSessionToken(SECRET, issued);
+    const muchLater = issued + (SESSION_DURATION_SECONDS + 60) * 1000;
+    expect(await readSessionToken(token, SECRET, muchLater)).toEqual({ valid: false });
+  });
+
+  it("will not renew a forged token", async () => {
+    const token = await createSessionToken(SECRET, Date.now());
+    const [payload] = token.split(".");
+    expect(await readSessionToken(`${payload}.forged`, SECRET)).toEqual({ valid: false });
   });
 });
 

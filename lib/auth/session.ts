@@ -12,8 +12,25 @@
 
 const encoder = new TextEncoder();
 
-/** How long a session lasts before it has to be established again. */
-export const SESSION_DURATION_SECONDS = 60 * 60 * 12;
+/**
+ * How long a session lasts without being used.
+ *
+ * Thirty days, and it slides: every request more than halfway through the
+ * window issues a fresh cookie, so somebody who uses this weekly never signs in
+ * again, while an abandoned session still dies thirty days after its last use.
+ *
+ * Twelve hours was the first guess and it meant logging in every morning, which
+ * is the kind of friction that gets a password written on a sticky note.
+ */
+export const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 30;
+
+/**
+ * Reissue the cookie once a session is this far through its life.
+ *
+ * Half, so an ordinary week of use always renews, without re-signing on every
+ * single request.
+ */
+export const SESSION_RENEW_AFTER_SECONDS = SESSION_DURATION_SECONDS / 2;
 
 export const SESSION_COOKIE = "office_attendance_session";
 
@@ -68,26 +85,55 @@ export async function createSessionToken(
   return `${payload}.${signature}`;
 }
 
+export type SessionState =
+  | { valid: false }
+  /** Valid, with the moment it runs out and whether it is due a refresh. */
+  | { valid: true; expiresAt: number; shouldRenew: boolean };
+
+/**
+ * Check a token and report how much life it has left.
+ *
+ * Returning the expiry rather than a bare boolean is what makes sliding
+ * sessions possible: the proxy needs to know whether to hand back a fresh
+ * cookie, and only the token can say.
+ */
+export async function readSessionToken(
+  token: string | undefined,
+  secret: string,
+  now = Date.now(),
+): Promise<SessionState> {
+  if (!token) return { valid: false };
+
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return { valid: false };
+
+  const expected = base64url(await hmac(secret, payload));
+  if (!constantTimeEquals(signature, expected)) return { valid: false };
+
+  try {
+    const { exp } = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
+    if (typeof exp !== "number") return { valid: false };
+
+    const seconds = Math.floor(now / 1000);
+    if (exp <= seconds) return { valid: false };
+
+    return {
+      valid: true,
+      expiresAt: exp,
+      shouldRenew: exp - seconds < SESSION_RENEW_AFTER_SECONDS,
+    };
+  } catch {
+    return { valid: false };
+  }
+}
+
 /** Is this token ours, and still current? */
 export async function verifySessionToken(
   token: string | undefined,
   secret: string,
   now = Date.now(),
 ): Promise<boolean> {
-  if (!token) return false;
-
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
-
-  const expected = base64url(await hmac(secret, payload));
-  if (!constantTimeEquals(signature, expected)) return false;
-
-  try {
-    const { exp } = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
-    return typeof exp === "number" && exp > Math.floor(now / 1000);
-  } catch {
-    return false;
-  }
+  return (await readSessionToken(token, secret, now)).valid;
 }
 
 /**
