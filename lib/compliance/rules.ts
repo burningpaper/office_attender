@@ -96,18 +96,42 @@ export function requiredDaysFor(
  * compliant nor non-compliant - there is nothing left to measure.
  */
 function score(employee: EmployeeInput, requiredDates: string[]): ComplianceResult {
-  let attended = 0;
-  let excused = 0;
+  const attendedDates: string[] = [];
+  const excusedDates: string[] = [];
   const missed: string[] = [];
+  const unrecorded: string[] = [];
 
   for (const date of requiredDates) {
     const state = employee.attendance.get(date);
-    if (state === "PRESENT") attended++;
-    else if (state === "ABSENT_EXPLAINED") excused++;
+
+    /**
+     * A missing row means one of two things, and they are opposites.
+     *
+     * If the register was kept that day for anybody else in the office, this
+     * person was left unticked, which is how a keeper says "not in". If it was
+     * not kept at all, nothing is known and nothing should be concluded - the
+     * alternative is reporting a whole office absent for a week nobody has got
+     * round to.
+     */
+    if (state === undefined) {
+      if (employee.recordedDates?.has(date)) missed.push(date);
+      else unrecorded.push(date);
+      continue;
+    }
+
+    if (state === "NOT_EMPLOYED") {
+      unrecorded.push(date);
+      continue;
+    }
+
+    if (state === "PRESENT") attendedDates.push(date);
+    else if (state === "ABSENT_EXPLAINED") excusedDates.push(date);
     else missed.push(date);
   }
 
-  const required = requiredDates.length - excused;
+  const attended = attendedDates.length;
+  const excused = excusedDates.length;
+  const required = requiredDates.length - excused - unrecorded.length;
 
   if (required === 0) {
     return {
@@ -115,11 +139,16 @@ function score(employee: EmployeeInput, requiredDates: string[]): ComplianceResu
       attended: 0,
       required: 0,
       excused,
+      attendedDates,
+      excusedDates,
       missed: [],
+      unrecorded,
       note:
-        excused > 0
-          ? `Every required day was excused (${excused}).`
-          : "No required days have elapsed yet.",
+        unrecorded.length > 0 && excused === 0
+          ? `Nothing recorded yet for ${unrecorded.length} required day${unrecorded.length === 1 ? "" : "s"}.`
+          : excused > 0
+            ? `Every required day was excused (${excused}).`
+            : "No required days have elapsed yet.",
     };
   }
 
@@ -128,7 +157,10 @@ function score(employee: EmployeeInput, requiredDates: string[]): ComplianceResu
     attended,
     required,
     excused,
+    attendedDates,
+    excusedDates,
     missed,
+    unrecorded,
   };
 }
 
@@ -139,7 +171,10 @@ function exemptResult(exemption: Exemption): ComplianceResult {
     attended: 0,
     required: 0,
     excused: 0,
+    attendedDates: [],
+    excusedDates: [],
     missed: [],
+    unrecorded: [],
     note: exemption.rawText ?? exemption.type,
   };
 }
@@ -192,12 +227,21 @@ export function twoWeekCompliance(
   const window = { start: addDays(asOf, -13), end: asOf };
   const required = requiredDaysFor(employee, calendar, window, asOf);
 
-  const notExcused = (date: string) =>
-    employee.attendance.get(date) !== "ABSENT_EXPLAINED";
-  const weds = required.filter((d) => weekdayOf(d) === WEDNESDAY).filter(notExcused);
-  const fris = required.filter((d) => weekdayOf(d) === FRIDAY).filter(notExcused);
+  /** Judgeable days: something is known and it is not an excused absence. */
+  const judgeable = (date: string) => {
+    const state = employee.attendance.get(date);
+    if (state === undefined) return employee.recordedDates?.has(date) ?? false;
+    return state !== "ABSENT_EXPLAINED" && state !== "NOT_EMPLOYED";
+  };
+  const weds = required.filter((d) => weekdayOf(d) === WEDNESDAY).filter(judgeable);
+  const fris = required.filter((d) => weekdayOf(d) === FRIDAY).filter(judgeable);
 
-  const excused = required.length - weds.length - fris.length;
+  const excused = required.filter(
+    (d) => employee.attendance.get(d) === "ABSENT_EXPLAINED",
+  ).length;
+  const unrecorded = required.filter(
+    (d) => employee.attendance.get(d) === undefined && !employee.recordedDates?.has(d),
+  );
 
   if (weds.length === 0 || fris.length === 0) {
     return {
@@ -205,8 +249,16 @@ export function twoWeekCompliance(
       attended: 0,
       required: 0,
       excused,
+      attendedDates: [],
+      excusedDates: required.filter(
+        (d) => employee.attendance.get(d) === "ABSENT_EXPLAINED",
+      ),
       missed: [],
+      unrecorded,
       note:
+        unrecorded.length > 0
+          ? `Nothing recorded yet for ${unrecorded.length} of the last fortnight's required days.`
+          :
         weds.length === 0 && fris.length === 0
           ? "No required days in the last two weeks."
           : weds.length === 0
@@ -224,7 +276,12 @@ export function twoWeekCompliance(
     attended: weds.filter(present).length + fris.filter(present).length,
     required: weds.length + fris.length,
     excused,
-    missed: [...weds, ...fris].filter((d) => !present(d)),
+    attendedDates: [...weds, ...fris].filter(present).sort(),
+    excusedDates: required
+      .filter((d) => employee.attendance.get(d) === "ABSENT_EXPLAINED")
+      .sort(),
+    missed: [...weds, ...fris].filter((d) => !present(d)).sort(),
+    unrecorded,
   };
 }
 
@@ -261,6 +318,9 @@ export function longTermCompliance(
       required: 0,
       excused: 0,
       missed: [],
+      attendedDates: [],
+      excusedDates: [],
+      unrecorded: [],
       note: `Only ${months.length} complete month${months.length === 1 ? "" : "s"} of history.`,
       wednesdayAverage: 0,
       fridayAverage: 0,
@@ -293,7 +353,10 @@ export function longTermCompliance(
     attended,
     required: months.length * target * 2,
     excused: 0,
+    attendedDates: [],
+    excusedDates: [],
     missed: [],
+    unrecorded: [],
     wednesdayAverage,
     fridayAverage,
     monthsCounted: months.length,

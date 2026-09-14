@@ -218,17 +218,48 @@ describe("two-week compliance", () => {
     });
     expect(twoWeekCompliance(both, CALENDAR, asOf).verdict).toBe("YES");
 
-    const wedOnly = employee({ attendance: withAttendance({ "2026-03-11": "PRESENT" }) });
+    // Explicitly absent on the other day, rather than merely unrecorded - the
+    // two look the same in a spreadsheet and mean opposite things.
+    const wedOnly = employee({
+      attendance: withAttendance({ "2026-03-11": "PRESENT", "2026-03-13": "ABSENT" }),
+    });
     expect(twoWeekCompliance(wedOnly, CALENDAR, asOf).verdict).toBe("NO");
 
-    const friOnly = employee({ attendance: withAttendance({ "2026-03-13": "PRESENT" }) });
+    const friOnly = employee({
+      attendance: withAttendance({ "2026-03-11": "ABSENT", "2026-03-13": "PRESENT" }),
+    });
     expect(twoWeekCompliance(friOnly, CALENDAR, asOf).verdict).toBe("NO");
+  });
+
+  it("is NA, not NO, when the other day has not been recorded yet", () => {
+    // Present on Wednesday, and nobody has filled in the Friday. Reporting that
+    // as a failure is how a whole office turns red on a Thursday afternoon.
+    const asOf = "2026-03-13";
+    const person = employee({ attendance: withAttendance({ "2026-03-11": "PRESENT" }) });
+    expect(twoWeekCompliance(person, CALENDAR, asOf).verdict).toBe("NA");
+  });
+
+  it("counts an untouched row as absent once the register was kept that day", () => {
+    // The keeper ticks who was in and leaves the rest blank. A blank on a day
+    // the register was kept means "not in", which is what they intended.
+    const asOf = "2026-03-13";
+    const person = employee({
+      attendance: withAttendance({ "2026-03-11": "PRESENT" }),
+      recordedDates: new Set(["2026-03-11", "2026-03-13"]),
+    });
+    expect(twoWeekCompliance(person, CALENDAR, asOf).verdict).toBe("NO");
   });
 
   it("reports NA when the fortnight has no required Friday to judge", () => {
     // Standing on Wednesday 6 May, the fortnight back to 23 April contains
     // Fridays 24 April and 1 May - and 1 May is Workers' Day.
-    const person = employee({ firstSeenDate: "2026-04-24", lastSeenDate: "2026-09-30" });
+    const person = employee({
+      firstSeenDate: "2026-04-24",
+      lastSeenDate: "2026-09-30",
+      // The Friday was recorded; there is simply no Wednesday in the window.
+      recordedDates: new Set(["2026-04-24"]),
+      attendance: withAttendance({ "2026-04-24": "PRESENT" }),
+    });
     const result = twoWeekCompliance(person, CALENDAR, "2026-04-24");
     expect(result.verdict).toBe("NA");
     expect(result.note).toMatch(/no required wednesday/i);

@@ -30,6 +30,16 @@ export type EmployeeInput = {
   attendance: Map<string, AttendanceState>;
   /** Marked as having left the company. */
   hasLeft?: boolean;
+  /**
+   * Days the register was kept for this office, whoever it was kept for.
+   *
+   * This is what tells a blank apart from a silence. If anybody in the office
+   * has a record for a day, the register was filled in that day, so somebody
+   * with no row was absent - which is exactly what a keeper means by leaving a
+   * box unticked. If nobody has a record, the day has not been done yet and
+   * nothing can be concluded about anyone.
+   */
+  recordedDates?: Set<string>;
 };
 
 export type ComplianceResult = {
@@ -43,8 +53,21 @@ export type ComplianceResult = {
   required: number;
   /** Required days removed because a reason was recorded. */
   excused: number;
+  /** Required days they were in the office. */
+  attendedDates: string[];
+  /** Required days removed from the denominator by a recorded reason. */
+  excusedDates: string[];
   /** Required days missed with no explanation. */
   missed: string[];
+  /**
+   * Required days nothing is known about.
+   *
+   * Not a failure. Before the register existed people only had rows for days a
+   * spreadsheet mentioned them; now a week simply has not been ticked yet.
+   * Either way, silence is not evidence of absence, and counting it as one
+   * makes everybody non-compliant until somebody gets round to them.
+   */
+  unrecorded: string[];
   /** Why the verdict is EXEMPT or NA, for display. */
   note?: string;
 };

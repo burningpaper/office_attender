@@ -9,7 +9,7 @@ import type {
 } from "../../compliance/types";
 
 const result = (verdict: Verdict): ComplianceResult => ({
-  verdict, attended: 0, required: 0, excused: 0, missed: [],
+  verdict, attended: 0, required: 0, excused: 0, missed: [], unrecorded: [], attendedDates: [], excusedDates: [],
 });
 
 const day = (date: string, state: DayDetail["state"], extra: Partial<DayDetail> = {}): DayDetail => ({
@@ -91,14 +91,16 @@ describe("who never gets a message", () => {
 
 describe("the dates quoted to each person", () => {
   const person = row("Carlos Feyder", {
-    monthDays: [
-      day("2026-08-05", "PRESENT"),
-      day("2026-08-07", "PRESENT"),
-      day("2026-08-12", "ABSENT_EXPLAINED", { reasonText: "On leave" }),
-      day("2026-08-26", "ABSENT"),
-      day("2026-08-28", "NO_RECORD"),
-      day("2026-08-31", "ABSENT", { outsideEmployment: true }),
-    ],
+    monthly: {
+      verdict: "NO",
+      attended: 2,
+      required: 3,
+      excused: 1,
+      attendedDates: ["2026-08-05", "2026-08-07"],
+      excusedDates: ["2026-08-12"],
+      missed: ["2026-08-26"],
+      unrecorded: [],
+    },
   });
 
   const [recipient] = buildRecipients([person], "MONTHLY", emails([[13, "carlos@x.com"]])).recipients;
@@ -113,12 +115,6 @@ describe("the dates quoted to each person", () => {
     // Telling somebody they failed to attend on a day they were signed off
     // sick is the kind of mistake that gets a system switched off.
     expect(recipient.missed).not.toContain("2026-08-12");
-  });
-
-  it("ignores days outside their employment and days with no record", () => {
-    const all = [...recipient.attended, ...recipient.missed, ...recipient.excused];
-    expect(all).not.toContain("2026-08-31");
-    expect(all).not.toContain("2026-08-28");
   });
 });
 
@@ -174,37 +170,47 @@ describe("rendering", () => {
   });
 });
 
-describe("dates that have not happened yet", () => {
-  it("never quotes a future required day as missed", () => {
-    // The month's required days are laid out in advance. A message sent on the
-    // 2nd once told two people they had failed to attend on the 30th.
-    const person = row("Future Person", {
-      monthDays: [
-        day("2026-09-02", "ABSENT"),
-        day("2026-09-04", "ABSENT"),
-        day("2026-09-30", "ABSENT"),
-      ],
+describe("the dates quoted come from the verdict, not a second calculation", () => {
+  it("never disagrees with the verdict about what was missed", () => {
+    /**
+     * The bug this replaces: somebody was on the non-compliant list showing
+     * "2 attended, 0 missed". The verdict counted two days with no record as
+     * missed; this side skipped them. Reading the result directly makes that
+     * impossible to reproduce.
+     */
+    const person = row("Mark Haefele", {
+      monthly: {
+        verdict: "NO",
+        attended: 2,
+        required: 4,
+        excused: 0,
+        attendedDates: ["2026-09-09", "2026-09-11"],
+        excusedDates: [],
+        missed: ["2026-09-02", "2026-09-04"],
+        unrecorded: [],
+      },
     });
-    const { recipients } = buildRecipients(
-      [person],
-      "MONTHLY",
-      emails([[13, "x@example.invalid"]]),
-      "2026-09-02",
-    );
-    expect(recipients[0].missed).toEqual(["2026-09-02"]);
+
+    const { recipients } = buildRecipients([person], "MONTHLY", emails([[12, "m@x.com"]]));
+    expect(recipients).toHaveLength(1);
+    expect(recipients[0].attended).toEqual(["2026-09-09", "2026-09-11"]);
+    expect(recipients[0].missed).toEqual(["2026-09-02", "2026-09-04"]);
   });
 
-  it("counts a day that has happened", () => {
-    const person = row("Past Person", {
-      monthDays: [day("2026-09-02", "PRESENT"), day("2026-09-04", "ABSENT")],
+  it("quotes the fortnight's days for a two-week message, not the month's", () => {
+    const person = row("Split Person", {
+      monthly: {
+        verdict: "YES", attended: 1, required: 1, excused: 0,
+        attendedDates: ["2026-09-02"], excusedDates: [], missed: [], unrecorded: [],
+      },
+      twoWeek: {
+        verdict: "NO", attended: 1, required: 2, excused: 0,
+        attendedDates: ["2026-09-09"], excusedDates: [], missed: ["2026-09-11"], unrecorded: [],
+      },
     });
-    const { recipients } = buildRecipients(
-      [person],
-      "MONTHLY",
-      emails([[11, "x@example.invalid"]]),
-      "2026-09-04",
-    );
-    expect(recipients[0].attended).toEqual(["2026-09-02"]);
-    expect(recipients[0].missed).toEqual(["2026-09-04"]);
+
+    const { recipients } = buildRecipients([person], "TWO_WEEK", emails([[12, "s@x.com"]]));
+    expect(recipients[0].attended).toEqual(["2026-09-09"]);
+    expect(recipients[0].missed).toEqual(["2026-09-11"]);
   });
 });

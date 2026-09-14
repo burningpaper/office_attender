@@ -91,6 +91,11 @@ export async function loadEmployeeRows(
       : day,
   );
 
+  /**
+   * Every day this office recorded anything at all. See EmployeeInput.
+   */
+  const recordedDates = new Set(attendance.map((row) => row.date));
+
   const attendanceByEmployee = new Map<number, Map<string, AttendanceState>>();
   const detailByEmployee = new Map<number, Map<string, (typeof attendance)[number]>>();
   for (const row of attendance) {
@@ -131,6 +136,7 @@ export async function loadEmployeeRows(
       })),
       attendance: attendanceByEmployee.get(employee.id) ?? new Map(),
       hasLeft: employee.status === "DEPARTED",
+      recordedDates,
     };
     const row = evaluateEmployee(input, calendar, month, asOf);
 

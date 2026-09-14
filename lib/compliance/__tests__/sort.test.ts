@@ -8,6 +8,9 @@ const result = (verdict: Verdict): ComplianceResult => ({
   required: 0,
   excused: 0,
   missed: [],
+  unrecorded: [],
+  attendedDates: [],
+  excusedDates: [],
 });
 
 function row(

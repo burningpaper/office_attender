@@ -34,7 +34,7 @@ export async function loadRecipientList(
     if (person.email) emailByEmployeeId.set(person.id, person.email);
   }
 
-  return buildRecipients(rows, category, emailByEmployeeId, asOf);
+  return buildRecipients(rows, category, emailByEmployeeId);
 }
 
 export type SendResult = {
