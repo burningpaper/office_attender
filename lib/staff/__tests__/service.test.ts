@@ -6,7 +6,7 @@ import * as s from "../../db/schema";
 import { freshDb } from "../../db/__tests__/helpers";
 import { seedCalendar } from "../../db/seed-calendar";
 import { parseWorkbook } from "../../import/parse-workbook";
-import { applyStaffList, type StaffPerson } from "../service";
+import { addPerson, applyStaffList, listPeople, updatePerson, type StaffPerson } from "../service";
 
 type Ctx = Awaited<ReturnType<typeof freshDb>>;
 let ctx: Ctx;
@@ -124,4 +124,143 @@ describe("applying a staff list", () => {
     const people = await ctx.db.select().from(s.employees);
     expect(people.filter((p) => p.email)).toHaveLength(56);
   }, 120_000);
+});
+
+describe("taking one person off the register", () => {
+  async function aPerson(name = "Amy Dudley") {
+    await applyStaffList(ctx.db, office, [person(...name.split(" ") as [string, string])]);
+    const [row] = await ctx.db.select().from(s.employees).where(eq(s.employees.displayName, name));
+    return row;
+  }
+
+  it("marks somebody as having left, and lets them come back", async () => {
+    const amy = await aPerson();
+
+    const gone = await updatePerson(ctx.db, office, amy.id, "LEAVE");
+    expect(gone.status).toBe("DEPARTED");
+
+    const back = await updatePerson(ctx.db, office, amy.id, "RESTORE");
+    expect(back.status).toBe("ACTIVE");
+  });
+
+  it("stops tracking somebody without pretending they left", async () => {
+    // Still employed, still on the roster, simply not subject to the policy.
+    const amy = await aPerson();
+    const result = await updatePerson(ctx.db, office, amy.id, "UNTRACK", "Seconded to Durban");
+
+    expect(result).toMatchObject({ status: "ACTIVE", untracked: true });
+    const [exemption] = await ctx.db.select().from(s.exemptions);
+    expect(exemption).toMatchObject({ rawText: "Seconded to Durban", active: true });
+    expect(exemption.effectiveFrom).not.toBeNull();
+  });
+
+  it("resumes tracking, ending every exemption they have collected", async () => {
+    // Somebody can pick up more than one over time - a note from an old
+    // spreadsheet and a later manual one. Leaving either active keeps them out.
+    const amy = await aPerson();
+    await ctx.db.insert(s.exemptions).values({
+      employeeId: amy.id, type: "REMOTE_LOCATION", rawText: "Stays in George", active: true,
+    });
+    await updatePerson(ctx.db, office, amy.id, "UNTRACK", "Parental leave");
+
+    const result = await updatePerson(ctx.db, office, amy.id, "TRACK");
+    expect(result.untracked).toBe(false);
+
+    const still = await ctx.db.select().from(s.exemptions).where(eq(s.exemptions.active, true));
+    expect(still).toHaveLength(0);
+  });
+
+  it("does not create a second exemption for the same reason", async () => {
+    const amy = await aPerson();
+    await updatePerson(ctx.db, office, amy.id, "UNTRACK", "Parental leave");
+    await updatePerson(ctx.db, office, amy.id, "TRACK");
+    await updatePerson(ctx.db, office, amy.id, "UNTRACK", "Parental leave");
+
+    expect(await ctx.db.select().from(s.exemptions)).toHaveLength(1);
+  });
+
+  it("refuses somebody from another office", async () => {
+    const amy = await aPerson();
+    const [other] = await ctx.db.insert(s.offices).values({ code: "DBN", name: "Durban" }).returning();
+    await expect(
+      updatePerson(ctx.db, other.id, amy.id, "LEAVE"),
+    ).rejects.toThrow(/not in this office/i);
+  });
+
+  it("keeps their attendance history either way", async () => {
+    const amy = await aPerson();
+    await ctx.db.insert(s.attendance).values({
+      employeeId: amy.id, date: "2026-09-09", state: "PRESENT", source: "MANUAL",
+    });
+
+    await updatePerson(ctx.db, office, amy.id, "LEAVE");
+    expect(await ctx.db.select().from(s.attendance)).toHaveLength(1);
+  });
+});
+
+describe("listing the roster", () => {
+  it("says who is untracked and why", async () => {
+    await applyStaffList(ctx.db, office, [person("Amy", "Dudley"), person("Ben", "Clay")]);
+    const [amy] = await ctx.db.select().from(s.employees).where(eq(s.employees.displayName, "Amy Dudley"));
+    await updatePerson(ctx.db, office, amy.id, "UNTRACK", "Permanently remote");
+
+    const people = await listPeople(ctx.db, office);
+    expect(people.find((p) => p.displayName === "Amy Dudley")!.untrackedReason).toBe("Permanently remote");
+    expect(people.find((p) => p.displayName === "Ben Clay")!.untrackedReason).toBeNull();
+  });
+});
+
+describe("adding one person by hand", () => {
+  it("creates somebody new, dated from today", async () => {
+    const result = await addPerson(ctx.db, office, {
+      name: "Thandi Nkosi", email: "thandi@example.invalid",
+    });
+    expect(result).toMatchObject({ created: true, restored: false });
+
+    const [row] = await ctx.db.select().from(s.employees);
+    expect(row.email).toBe("thandi@example.invalid");
+    // Dated, so they are not judged on days before anybody had heard of them.
+    expect(row.firstSeenDate).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it("finds somebody already here instead of making a second one", async () => {
+    await applyStaffList(ctx.db, office, [person("Zakiya", "Karim")]);
+    const result = await addPerson(ctx.db, office, { name: "Zakiyya Karim" });
+
+    expect(result.created).toBe(false);
+    expect(await ctx.db.select().from(s.employees)).toHaveLength(1);
+  });
+
+  it("brings back somebody who had left", async () => {
+    await applyStaffList(ctx.db, office, [person("Ben", "Clay")]);
+    const [ben] = await ctx.db.select().from(s.employees);
+    await updatePerson(ctx.db, office, ben.id, "LEAVE");
+
+    const result = await addPerson(ctx.db, office, { name: "Ben Clay" });
+    expect(result).toMatchObject({ created: false, restored: true });
+
+    const [after] = await ctx.db.select().from(s.employees);
+    expect(after.status).toBe("ACTIVE");
+  });
+
+  it("touches nobody else", async () => {
+    // The whole-list path marks everybody absent from it as departed. Adding
+    // one person must not.
+    await applyStaffList(ctx.db, office, [person("Amy", "Dudley"), person("Ben", "Clay")]);
+    await addPerson(ctx.db, office, { name: "Thandi Nkosi" });
+
+    const people = await ctx.db.select().from(s.employees);
+    expect(people).toHaveLength(3);
+    expect(people.every((p) => p.status === "ACTIVE")).toBe(true);
+  });
+
+  it("refuses an address that is not one", async () => {
+    await expect(
+      addPerson(ctx.db, office, { name: "Someone", email: "not-an-address" }),
+    ).rejects.toThrow(/email address/i);
+  });
+
+  it("refuses an empty name", async () => {
+    await expect(addPerson(ctx.db, office, { name: "   " })).rejects.toThrow(/name is required/i);
+  });
 });

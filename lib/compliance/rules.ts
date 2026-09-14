@@ -196,15 +196,22 @@ export function monthlyCompliance(
   month: string, // "YYYY-MM"
   asOf: string,
 ): ComplianceResult {
-  const exemption = activeExemption(employee, asOf);
-  if (exemption) return exemptResult(exemption);
-
   const year = Number(month.slice(0, 4));
   const monthIndex = Number(month.slice(5, 7)) - 1;
   const window = {
     start: `${month}-01`,
     end: lastDayOfMonth(year, monthIndex),
   };
+
+  /**
+   * An exemption is judged as at the month being looked at, not as at today.
+   *
+   * Somebody taken off tracking this week should stop counting from this week
+   * onward - not have August quietly rewritten as though the policy never
+   * applied to them. "Going forward" has to mean forward.
+   */
+  const exemption = activeExemption(employee, window.end < asOf ? window.end : asOf);
+  if (exemption) return exemptResult(exemption);
 
   return score(employee, requiredDaysFor(employee, calendar, window, asOf));
 }

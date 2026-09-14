@@ -377,3 +377,31 @@ describe("last attended", () => {
     expect(lastAttended(person)).toBeNull();
   });
 });
+
+describe("taking somebody off tracking does not rewrite the past", () => {
+  const from = (effectiveFrom: string): Exemption => ({
+    type: "OTHER",
+    rawText: "Permanently remote",
+    effectiveFrom,
+    effectiveTo: null,
+    active: true,
+  });
+
+  it("leaves earlier months exactly as they were", () => {
+    // Stopped being tracked in September. August still counts.
+    const person = employee({
+      exemptions: [from("2026-09-14")],
+      attendance: withAttendance({ "2026-08-05": "ABSENT", "2026-08-07": "ABSENT" }),
+      recordedDates: new Set(["2026-08-05", "2026-08-07"]),
+    });
+
+    const august = monthlyCompliance(person, CALENDAR, "2026-08", "2026-09-14");
+    expect(august.verdict).not.toBe("EXEMPT");
+  });
+
+  it("applies from the month it starts in onwards", () => {
+    const person = employee({ exemptions: [from("2026-09-14")] });
+    expect(monthlyCompliance(person, CALENDAR, "2026-09", "2026-09-14").verdict).toBe("EXEMPT");
+    expect(monthlyCompliance(person, CALENDAR, "2026-10", "2026-10-31").verdict).toBe("EXEMPT");
+  });
+});

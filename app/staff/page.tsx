@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { eq, sql } from "drizzle-orm";
+import { Roster } from "./roster";
 import { StaffClient } from "./staff-client";
 import { db } from "@/lib/db/client";
 import { listOffices, resolveOffice } from "@/lib/db/offices";
+import { listPeople } from "@/lib/staff/service";
 import { employees } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,8 @@ export default async function StaffPage({
         .from(employees)
         .where(eq(employees.officeId, office.id))
     : [{ total: 0, active: 0 }];
+
+  const people = office ? await listPeople(db, office.id) : [];
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
@@ -60,6 +64,21 @@ export default async function StaffPage({
       </header>
 
       <StaffClient offices={offices} officeCode={office?.code} />
+
+      {people.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-1 text-sm font-medium">Who is on the register</h2>
+          <p className="mb-3 text-xs text-muted">
+            <strong className="font-medium text-foreground">Mark as left</strong> removes
+            somebody entirely — they disappear from the register and every report, and are
+            never emailed.{" "}
+            <strong className="font-medium text-foreground">Stop tracking</strong> keeps them
+            on the register so a visit can still be recorded, but the attendance policy stops
+            applying. Both can be undone.
+          </p>
+          <Roster people={people} officeCode={office?.code} />
+        </section>
+      )}
 
       <footer className="mt-8 border-t border-border-soft pt-4 text-xs text-subtle">
         <p>

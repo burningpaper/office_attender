@@ -152,6 +152,7 @@ export function ComplianceTable({
             {visible.map((row) => (
               <Row
                 key={row.employeeId}
+                officeCode={officeCode}
                 row={row}
                 expanded={expanded === row.employeeId}
                 onToggle={() =>
@@ -179,10 +180,12 @@ function Row({
   row,
   expanded,
   onToggle,
+  officeCode,
 }: {
   row: EmployeeRowWithDays;
   expanded: boolean;
   onToggle: () => void;
+  officeCode?: string;
 }) {
   return (
     <>
@@ -244,10 +247,132 @@ function Row({
         <tr className="border-b border-border-soft bg-surface-muted">
           <td colSpan={6} className="px-3 pb-4 pt-1">
             <DayDetail row={row} />
+            <StopTracking row={row} officeCode={officeCode} />
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+/**
+ * Taking somebody off tracking from where you noticed the problem.
+ *
+ * The staff screen can do this too, but the moment you want it is while
+ * looking at a row that should not be red - so it is here as well, and it
+ * takes effect from this month onwards rather than rewriting the past.
+ */
+function StopTracking({
+  row,
+  officeCode,
+}: {
+  row: EmployeeRowWithDays;
+  officeCode?: string;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function act(action: "UNTRACK" | "TRACK" | "LEAVE") {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/staff/person", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          office: officeCode, employeeId: row.employeeId, action, reason,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body.ok !== true) {
+        setError(body.error ?? "That change was not saved.");
+        return;
+      }
+      setDone(
+        action === "LEAVE"
+          ? `${row.displayName} is marked as having left. Reload to update the report.`
+          : action === "UNTRACK"
+            ? `${row.displayName} is no longer tracked, from this month onwards. Reload to update the report.`
+            : `${row.displayName} is tracked again. Reload to update the report.`,
+      );
+      setAsking(false);
+    } catch (cause) {
+      setError(
+        `Could not reach the server: ${cause instanceof Error ? cause.message : "unknown error"}.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) return <p className="mt-3 text-xs text-yes">{done}</p>;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border-soft pt-3">
+      {error && <span className="text-xs text-no">{error}</span>}
+
+      {asking ? (
+        <>
+          <input
+            autoFocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void act("UNTRACK");
+              if (e.key === "Escape") setAsking(false);
+            }}
+            placeholder="Why not tracked?"
+            aria-label={`Why ${row.displayName} is no longer tracked`}
+            className="w-48 rounded border border-border-soft bg-surface px-2 py-1 text-xs"
+          />
+          <SmallButton label="Save" onClick={() => void act("UNTRACK")} disabled={busy} />
+          <SmallButton label="Cancel" onClick={() => setAsking(false)} />
+        </>
+      ) : row.isExempt ? (
+        <>
+          <span className="text-xs text-muted">
+            Not tracked{row.exemptionNote ? ` — ${row.exemptionNote}` : ""}.
+          </span>
+          <SmallButton label="Track again" onClick={() => void act("TRACK")} disabled={busy} />
+        </>
+      ) : (
+        <>
+          <SmallButton label="Stop tracking" onClick={() => setAsking(true)} />
+          <SmallButton label="Mark as left" tone="no" onClick={() => void act("LEAVE")} disabled={busy} />
+          <span className="text-xs text-subtle">takes effect from this month onwards</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SmallButton({
+  label,
+  onClick,
+  disabled,
+  tone,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "no";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded border px-2 py-1 text-xs transition-colors disabled:opacity-40 ${
+        tone === "no"
+          ? "border-border-soft text-muted hover:border-no hover:text-no"
+          : "border-border-soft text-muted hover:border-border-strong hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
