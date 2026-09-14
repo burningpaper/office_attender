@@ -61,14 +61,33 @@ export async function loadWeek(
       employeeId: s.exemptions.employeeId,
       rawText: s.exemptions.rawText,
       type: s.exemptions.type,
+      effectiveFrom: s.exemptions.effectiveFrom,
+      effectiveTo: s.exemptions.effectiveTo,
     })
     .from(s.exemptions)
     .where(eq(s.exemptions.active, true));
-  const exemptionByEmployee = new Map(
-    exemptions.map((e) => [e.employeeId, e.rawText ?? e.type]),
+
+  /**
+   * Somebody not tracked is left out of the week entirely.
+   *
+   * Judged against the week's last required day rather than today, so the
+   * weeks before they were taken off tracking still list them - the register
+   * for a week already kept should not change underneath somebody.
+   */
+  const judgeOn = dates[dates.length - 1];
+  const untrackedBy = new Map(
+    exemptions
+      .filter(
+        (e) =>
+          (!e.effectiveFrom || e.effectiveFrom <= judgeOn) &&
+          (!e.effectiveTo || e.effectiveTo >= judgeOn),
+      )
+      .map((e) => [e.employeeId, e.rawText ?? e.type]),
   );
 
-  const existing = people.length
+  const tracked = people.filter((p) => !untrackedBy.has(p.id));
+
+  const existing = tracked.length
     ? await db
         .select({
           employeeId: s.attendance.employeeId,
@@ -80,7 +99,7 @@ export async function loadWeek(
         .from(s.attendance)
         .where(
           and(
-            inArray(s.attendance.employeeId, people.map((p) => p.id)),
+            inArray(s.attendance.employeeId, tracked.map((p) => p.id)),
             inArray(s.attendance.date, dates),
           ),
         )
@@ -90,10 +109,10 @@ export async function loadWeek(
     existing.map((row) => [`${row.employeeId}|${row.date}`, row]),
   );
 
-  const rows: RegisterRow[] = people.map((person) => ({
+  const rows: RegisterRow[] = tracked.map((person) => ({
     employeeId: person.id,
     displayName: person.displayName,
-    exemptionNote: exemptionByEmployee.get(person.id) ?? null,
+    exemptionNote: null,
     entries: Object.fromEntries(
       dates.map((date) => {
         const found = byEmployeeDate.get(`${person.id}|${date}`);
@@ -112,7 +131,13 @@ export async function loadWeek(
     ),
   }));
 
-  return { monday, label: formatWeek(monday), days, rows };
+  return {
+    monday,
+    label: formatWeek(monday),
+    days,
+    rows,
+    untracked: people.length - tracked.length,
+  };
 }
 
 export type SaveEntry = {

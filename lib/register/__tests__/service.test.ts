@@ -61,13 +61,43 @@ describe("loading a week", () => {
     });
   });
 
-  it("shows an exemption against the person it applies to", async () => {
+  it("leaves out anybody who is not tracked", async () => {
     const [amy] = await ctx.db.select().from(s.employees).where(eq(s.employees.normalisedKey, "amy dudley"));
     await ctx.db.insert(s.exemptions).values({
       employeeId: amy.id, type: "REMOTE_LOCATION", rawText: "Stays in George", active: true,
     });
+
     const week = await loadWeek(ctx.db, office, MONDAY);
-    expect(week.rows.find((r) => r.employeeId === amy.id)!.exemptionNote).toBe("Stays in George");
+    expect(week.rows.map((r) => r.displayName)).toEqual(["Ben Clay"]);
+    expect(week.untracked).toBe(1);
+  });
+
+  it("still lists them in the weeks before they were taken off tracking", async () => {
+    // The register for a week already kept should not change underneath
+    // somebody who filled it in.
+    const [amy] = await ctx.db.select().from(s.employees).where(eq(s.employees.normalisedKey, "amy dudley"));
+    await ctx.db.insert(s.exemptions).values({
+      employeeId: amy.id, type: "OTHER", rawText: "Seconded", active: true,
+      effectiveFrom: "2026-09-07",
+    });
+
+    const before = await loadWeek(ctx.db, office, "2026-08-31");
+    expect(before.rows.map((r) => r.displayName)).toContain("Amy Dudley");
+    expect(before.untracked).toBe(0);
+
+    const after = await loadWeek(ctx.db, office, MONDAY);
+    expect(after.rows.map((r) => r.displayName)).not.toContain("Amy Dudley");
+  });
+
+  it("lists them again once tracking resumes", async () => {
+    const [amy] = await ctx.db.select().from(s.employees).where(eq(s.employees.normalisedKey, "amy dudley"));
+    await ctx.db.insert(s.exemptions).values({
+      employeeId: amy.id, type: "OTHER", rawText: "Was seconded", active: true,
+      effectiveFrom: "2026-08-01", effectiveTo: "2026-09-01",
+    });
+
+    const week = await loadWeek(ctx.db, office, MONDAY);
+    expect(week.rows.map((r) => r.displayName)).toContain("Amy Dudley");
   });
 });
 

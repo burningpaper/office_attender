@@ -164,6 +164,9 @@ export function RegisterClient({
               {data.rows.filter((r) => openDays.some((d) => r.entries[d.date]?.present)).length}
             </span>{" "}
             of {data.rows.length} in this week
+            {data.untracked > 0 && (
+              <> · <span className="text-subtle">{data.untracked} not tracked</span></>
+            )}
           </p>
         )}
       </div>
@@ -212,11 +215,6 @@ export function RegisterClient({
                   <tr key={row.employeeId} className="border-b border-border-soft last:border-0 hover:bg-surface-muted">
                     <th scope="row" className="px-3 py-2 text-left font-normal">
                       {row.displayName}
-                      {row.exemptionNote && (
-                        <span className="ml-2 rounded bg-exempt-bg px-1.5 py-0.5 text-[0.65rem] text-exempt">
-                          {row.exemptionNote}
-                        </span>
-                      )}
                     </th>
 
                     {data.days.map((day) => {

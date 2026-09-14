@@ -73,6 +73,8 @@ export type RegisterWeek = {
   label: string;
   days: DayStatus[];
   rows: RegisterRow[];
+  /** People left out of this week because they are not tracked. */
+  untracked: number;
 };
 
 /**
