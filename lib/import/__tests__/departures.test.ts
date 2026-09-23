@@ -32,7 +32,9 @@ beforeAll(() => {
 async function imported() {
   const ctx = await freshDb();
   await seedCalendar(ctx.db, 2026, 2026);
-  const report = await importDeclining(ctx.db, buffer, "data.xlsx");
+  // Stands after the workbook's last date, so the whole file is imported. A
+  // workbook is not allowed to record days that have not happened yet.
+  const report = await importDeclining(ctx.db, buffer, "data.xlsx", "2026-10-01");
   return { ctx, report };
 }
 
@@ -88,7 +90,7 @@ describe("who gets marked as having left", () => {
 
     // Re-import the same file. Ben is on the September sheet, so he comes back.
     await ctx.db.delete(s.uploads);
-    const second = await importDeclining(ctx.db, buffer, "data.xlsx");
+    const second = await importDeclining(ctx.db, buffer, "data.xlsx", "2026-10-01");
 
     const [ben] = await ctx.db
       .select()

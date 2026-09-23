@@ -728,5 +728,23 @@ failure. It has been fixed for empty cells and for future dates in emails; it sl
 through here because a predicted zero is a row like any other.
 
 The upload timestamp is the clean discriminator — anything dated after the file was
-uploaded was a prediction, not a record. Proposed rather than done: it deletes rows, and
-that is the user's call.
+uploaded was a prediction, not a record. The importer now drops those columns at the door
+and says so in a warning, rather than dropping them silently.
+
+That alone was not enough, because the rows were already in the database. It also exposed
+a second, older assumption: that a day is judgeable as soon as it has any attendance row
+against it. Today had rows — fifty imported zeros and eight excused absences typed in by
+somebody working through the morning — so it qualified, and the forty-five people nobody
+had got to yet were counted absent.
+
+So the denominator now stops strictly before today. A day in progress is not evidence:
+people arrive at different times and the register is filled in as the day goes. The price
+is a day of lag, which is the right way round — the alternative is chasing somebody on the
+strength of a form that has not been filled in yet.
+
+With that in place, seventeen of Cape Town and Durban's fifty-two non-compliant people are
+improving. A third of the chase list had already responded to being chased.
+
+The 694 rows already in the database need `npm run attendance:drop-unhappened -- --run`.
+It journals every removal to attendance_history first, never touches a PRESENT row or
+anything typed into the register, and is safe to re-run.

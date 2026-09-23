@@ -28,8 +28,14 @@ beforeAll(() => {
 
 async function importInto() {
   const ctx = await freshDb();
-  // Declines every proposal, so these tests see the file exactly as parsed.
-  const report = await importDeclining(ctx.db, buffer, "data_example.xls.xlsx");
+  /**
+   * Declines every proposal, so these tests see the file exactly as parsed -
+   * and stands after the last date in it, so nothing is withheld as not having
+   * happened yet. The workbook runs to 30 September; importing it as though it
+   * were still the 1st would correctly drop the month's remaining columns, and
+   * these tests are about the file's full shape.
+   */
+  const report = await importDeclining(ctx.db, buffer, "data_example.xls.xlsx", "2026-10-01");
   return { ctx, report };
 }
 
@@ -246,5 +252,64 @@ describe("dry run", () => {
     expect(await ctx.db.select().from(s.employees)).toHaveLength(0);
     expect(await ctx.db.select().from(s.attendance)).toHaveLength(0);
     expect(await ctx.db.select().from(s.uploads)).toHaveLength(0);
+  });
+});
+
+/**
+ * The September registry, which was laid out for the whole month in advance.
+ *
+ * Uploaded on the 8th, it carried a cell for every Wednesday and Friday to the
+ * 30th, all of them empty and therefore all of them reading as FALSE. Imported
+ * verbatim, fifty-three people were marked absent for days that had not
+ * happened, and those absences were later quoted back at them.
+ */
+describe("days that had not happened when the file arrived", () => {
+  const REGISTRY = path.resolve(__dirname, "../../../CT Registry 8 Sept 2026.xlsx");
+
+  let registry: Buffer;
+  beforeAll(() => {
+    if (!existsSync(REGISTRY)) {
+      throw new Error(
+        `Fixture workbook not found at ${REGISTRY}. It is excluded from git on ` +
+          `purpose (real employee data). Copy it into the project root to run these tests.`,
+      );
+    }
+    registry = readFileSync(REGISTRY);
+  });
+
+  it("imports nothing dated after the upload", async () => {
+    const ctx = await freshDb();
+    await importDeclining(ctx.db, registry, "CT Registry 8 Sept 2026.xlsx", "2026-09-08");
+
+    const [{ latest }] = await ctx.db
+      .select({ latest: sql<string | null>`max(${s.attendance.date})::text` })
+      .from(s.attendance);
+    expect(latest).not.toBeNull();
+    expect(latest! <= "2026-09-08").toBe(true);
+  });
+
+  it("says so, rather than dropping the columns silently", async () => {
+    const ctx = await freshDb();
+    const report = await importDeclining(
+      ctx.db, registry, "CT Registry 8 Sept 2026.xlsx", "2026-09-08",
+    );
+
+    const warning = report.warnings.find((w) => w.code === "DATES_NOT_YET_HAPPENED");
+    expect(warning).toBeDefined();
+    expect(warning!.message).toMatch(/not happened yet/i);
+  });
+
+  it("keeps the same days when the file arrives after the month has run", async () => {
+    // Nothing is withheld from a workbook uploaded once the month is over.
+    const ctx = await freshDb();
+    const report = await importDeclining(
+      ctx.db, registry, "CT Registry 8 Sept 2026.xlsx", "2026-10-01",
+    );
+
+    expect(report.warnings.some((w) => w.code === "DATES_NOT_YET_HAPPENED")).toBe(false);
+    const [{ latest }] = await ctx.db
+      .select({ latest: sql<string | null>`max(${s.attendance.date})::text` })
+      .from(s.attendance);
+    expect(latest).toBe("2026-09-30");
   });
 });

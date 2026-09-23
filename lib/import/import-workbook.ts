@@ -24,7 +24,7 @@ import { classifyCell } from "./classify-cell";
 import { deriveExemption } from "./derive-exemptions";
 import { parseWorkbook } from "./parse-workbook";
 import { resolveIdentities, type ResolvedIdentity } from "./resolve-identities";
-import type { ParseWarning } from "./types";
+import type { ParseWarning, WorkbookParseResult } from "./types";
 
 type Db = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 
@@ -77,6 +77,45 @@ export function hashBuffer(buffer: Buffer): string {
 }
 
 /** Make sure calendar_days covers every date the file mentions. */
+/**
+ * Discard cells for days that had not happened yet when the file arrived.
+ *
+ * A register is a record of what occurred. These workbooks are laid out for the
+ * whole month in advance, which means every future Wednesday and Friday already
+ * has a cell, and an empty cell reads as FALSE - as absent. The September 2026
+ * file was uploaded on the 8th and carried fifty-three people marked absent for
+ * every remaining required day of the month, 694 rows of them, not one of which
+ * said PRESENT. Those absences were then quoted back at people who had in fact
+ * been in the office.
+ *
+ * The upload date is the honest line. Anything after it was a prediction, and a
+ * prediction is not evidence. Dropping the cells is the difference between
+ * "nobody came in" and "nobody has said yet" - and the second is what the
+ * compliance engine needs to hear, because it declines to judge a day it knows
+ * nothing about.
+ */
+function dropUnhappenedDates(parsed: WorkbookParseResult, asOf: string): WorkbookParseResult {
+  const records = parsed.records.filter((r) => r.date <= asOf);
+  if (records.length === parsed.records.length) return parsed;
+
+  const dropped = [...new Set(parsed.records.filter((r) => r.date > asOf).map((r) => r.date))].sort();
+  return {
+    ...parsed,
+    records,
+    warnings: [
+      ...parsed.warnings,
+      {
+        code: "DATES_NOT_YET_HAPPENED",
+        sheetName: "",
+        message:
+          `Ignored ${dropped.length} column${dropped.length === 1 ? "" : "s"} for days that ` +
+          `had not happened yet (${dropped[0]} to ${dropped[dropped.length - 1]}). A blank cell ` +
+          `for a future day is not an absence.`,
+      },
+    ],
+  };
+}
+
 async function ensureCalendarCoverage(db: Db, dates: string[]): Promise<void> {
   if (dates.length === 0) return;
   const years = [...new Set(dates.map((d) => Number(d.slice(0, 4))))];
@@ -165,7 +204,7 @@ export async function importWorkbook(
     };
   }
 
-  const parsed = parseWorkbook(buffer);
+  const parsed = dropUnhappenedDates(parseWorkbook(buffer), asOf);
   const allDates = [...new Set(parsed.records.map((r) => r.date))].sort();
   const dateRange = allDates.length
     ? { start: allDates[0], end: allDates[allDates.length - 1] }
@@ -398,7 +437,7 @@ export async function importWorkbook(
   }
 
   const finalParse = Object.keys(confirmedDateColumns).length
-    ? parseWorkbook(buffer, { confirmedDateColumns })
+    ? dropUnhappenedDates(parseWorkbook(buffer, { confirmedDateColumns }), asOf)
     : parsed;
 
   const finalClassified = finalParse.records.map((r) => ({ ...r, ...classifyCell(r.rawValue) }));

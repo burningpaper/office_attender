@@ -21,7 +21,9 @@ export type WarningCode =
   /** A sheet deliberately not parsed. */
   | "SHEET_SKIPPED"
   /** A sheet with no recognisable date header row. */
-  | "NO_DATE_HEADER";
+  | "NO_DATE_HEADER"
+  /** Columns for days that had not happened when the file was uploaded. */
+  | "DATES_NOT_YET_HAPPENED";
 
 export type ParseWarning = {
   code: WarningCode;

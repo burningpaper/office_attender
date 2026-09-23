@@ -69,7 +69,17 @@ export function activeExemption(
  * The days this person was actually expected in the office, within a window.
  *
  * A date has to clear four hurdles: the calendar says it is a required working
- * day, it has already happened, and it falls inside their employment window.
+ * day, it has finished, and it falls inside their employment window.
+ *
+ * "Finished" means strictly before `asOf`, not up to and including it. Today is
+ * still being lived: the register is filled in through the day, people arrive
+ * at different times, and somebody who has not been ticked at half past nine
+ * has not missed anything - nobody has looked for them yet. Judging a day in
+ * progress turns an unfinished register into a roomful of absentees.
+ *
+ * The cost is a day of lag: attend on Wednesday and it counts from Thursday.
+ * That is the right way round, because the alternative is chasing somebody on
+ * the strength of a form that has not been filled in.
  */
 export function requiredDaysFor(
   employee: EmployeeInput,
@@ -81,7 +91,7 @@ export function requiredDaysFor(
     .filter((day) => {
       if (!day.isRequiredDay) return false;
       if (day.date < window.start || day.date > window.end) return false;
-      if (day.date > asOf) return false; // not yet elapsed
+      if (day.date >= asOf) return false; // not yet finished
       if (employee.firstSeenDate && day.date < employee.firstSeenDate) return false;
       if (employee.lastSeenDate && day.date > employee.lastSeenDate) return false;
       return true;

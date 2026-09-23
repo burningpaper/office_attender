@@ -51,7 +51,8 @@ describe("the current-month bug (DESIGN.md §2.1)", () => {
   });
 
   it("counts only the required days that have already happened", () => {
-    // On Wednesday 9 September, two required days have elapsed: the 2nd and 4th.
+    // Standing on Wednesday 9 September, two required days have finished: the
+    // 2nd and the 4th. The 9th is today and is still being lived.
     const person = employee({
       attendance: withAttendance({
         "2026-09-02": "PRESENT",
@@ -60,14 +61,45 @@ describe("the current-month bug (DESIGN.md §2.1)", () => {
       }),
     });
     const result = monthlyCompliance(person, CALENDAR, "2026-09", "2026-09-09");
-    expect(result.required).toBe(3); // 2nd, 4th, 9th
-    expect(result.attended).toBe(3);
+    expect(result.required).toBe(2); // the 2nd and the 4th
+    expect(result.attended).toBe(2);
     expect(result.verdict).toBe("YES");
+
+    // By Thursday the 9th has finished and joins the denominator.
+    expect(monthlyCompliance(person, CALENDAR, "2026-09", "2026-09-10").required).toBe(3);
+  });
+
+  it("does not condemn a roomful of people for a register still being filled in", () => {
+    // The real failure, on Wednesday 23 September 2026. The September workbook
+    // had been laid out a month in advance with FALSE in every cell, so fifty
+    // of Cape Town's fifty-three read as absent for a day that had barely
+    // started - enough to cancel out anyone's recent good behaviour.
+    const person = employee({
+      attendance: withAttendance({
+        "2026-09-02": "ABSENT",
+        "2026-09-04": "ABSENT",
+        "2026-09-09": "PRESENT",
+        "2026-09-11": "PRESENT",
+        "2026-09-16": "PRESENT",
+        "2026-09-18": "PRESENT",
+        "2026-09-23": "ABSENT", // nobody has kept today's register yet
+      }),
+      recordedDates: new Set([
+        "2026-09-02", "2026-09-04", "2026-09-09",
+        "2026-09-11", "2026-09-16", "2026-09-18", "2026-09-23",
+      ]),
+    });
+
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-23");
+    expect(row.monthly.missed).toEqual(["2026-09-02", "2026-09-04"]);
+    expect(row.monthly.required).toBe(6); // today is not one of them
+    expect(row.recent.result.verdict).toBe("YES");
+    expect(row.improving).toBe(true);
   });
 
   it("does not hold the rest of the month against anyone", () => {
     const person = employee({ attendance: withAttendance({ "2026-09-02": "PRESENT" }) });
-    const result = monthlyCompliance(person, CALENDAR, "2026-09", "2026-09-02");
+    const result = monthlyCompliance(person, CALENDAR, "2026-09", "2026-09-03");
     expect(result.verdict).toBe("YES");
     expect(result.required).toBe(1);
     // September has nine required days in total; eight are still in the future.
@@ -113,7 +145,7 @@ describe("excused absences are neutral (DESIGN.md §10)", () => {
         "2026-03-06": "ABSENT_EXPLAINED", // sick
       }),
     });
-    const result = monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-06");
+    const result = monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-07");
     expect(result.verdict).toBe("YES");
     expect(result.attended).toBe(1);
     expect(result.required).toBe(1); // the sick day left the denominator
@@ -145,7 +177,7 @@ describe("excused absences are neutral (DESIGN.md §10)", () => {
         "2026-03-13": "PRESENT",
       }),
     });
-    const result = monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-13");
+    const result = monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-14");
     expect(result).toMatchObject({ verdict: "YES", attended: 1, required: 1, excused: 3 });
   });
 
@@ -153,7 +185,7 @@ describe("excused absences are neutral (DESIGN.md §10)", () => {
     const person = employee({
       attendance: withAttendance({ "2026-03-04": "PRESENT", "2026-03-06": "ABSENT" }),
     });
-    const result = monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-06");
+    const result = monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-07");
     expect(result.verdict).toBe("NO");
     expect(result.missed).toEqual(["2026-03-06"]);
   });
@@ -206,13 +238,13 @@ describe("exemptions", () => {
       exemptions: [{ ...remote, active: false }],
       attendance: withAttendance({ "2026-03-04": "ABSENT" }),
     });
-    expect(monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-04").verdict).toBe("NO");
+    expect(monthlyCompliance(person, CALENDAR, "2026-03", "2026-03-05").verdict).toBe("NO");
   });
 });
 
 describe("two-week compliance", () => {
   it("needs one Wednesday AND one Friday", () => {
-    const asOf = "2026-03-13"; // a Friday
+    const asOf = "2026-03-14"; // the Saturday, so Friday the 13th has finished
     const both = employee({
       attendance: withAttendance({ "2026-03-11": "PRESENT", "2026-03-13": "PRESENT" }),
     });
@@ -242,7 +274,7 @@ describe("two-week compliance", () => {
   it("counts an untouched row as absent once the register was kept that day", () => {
     // The keeper ticks who was in and leaves the rest blank. A blank on a day
     // the register was kept means "not in", which is what they intended.
-    const asOf = "2026-03-13";
+    const asOf = "2026-03-14";
     const person = employee({
       attendance: withAttendance({ "2026-03-11": "PRESENT" }),
       recordedDates: new Set(["2026-03-11", "2026-03-13"]),
@@ -260,7 +292,7 @@ describe("two-week compliance", () => {
       recordedDates: new Set(["2026-04-24"]),
       attendance: withAttendance({ "2026-04-24": "PRESENT" }),
     });
-    const result = twoWeekCompliance(person, CALENDAR, "2026-04-24");
+    const result = twoWeekCompliance(person, CALENDAR, "2026-04-25");
     expect(result.verdict).toBe("NA");
     expect(result.note).toMatch(/no required wednesday/i);
   });
@@ -271,7 +303,7 @@ describe("two-week compliance", () => {
       joiner,
       CALENDAR,
       { start: "2026-03-01", end: "2026-03-31" },
-      "2026-03-13",
+      "2026-03-14",
     );
     expect(required).toEqual(["2026-03-11", "2026-03-13"]);
   });
@@ -428,7 +460,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       recordedDates: new Set(september),
     });
 
-    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19");
     expect(row.monthly.verdict).toBe("NO"); // still true for the month
     expect(row.recent.result.verdict).toBe("YES");
     expect(row.improving).toBe(true);
@@ -440,7 +472,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       attendance: runOf(september, "PPAPAP"),
       recordedDates: new Set(september),
     });
-    expect(evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18").improving).toBe(false);
+    expect(evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19").improving).toBe(false);
   });
 
   it("does not flag somebody who is already compliant", () => {
@@ -450,7 +482,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       attendance: runOf(september, "PPPPPP"),
       recordedDates: new Set(september),
     });
-    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19");
     expect(row.monthly.verdict).toBe("YES");
     expect(row.improving).toBe(false);
   });
@@ -468,7 +500,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       lastReminderDate: "2026-09-08",
     });
 
-    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19");
     expect(row.recent.basis).toBe("SINCE_REMINDER");
     expect(row.recent.since).toBe("2026-09-08");
     expect(row.recent.result.attendedDates).toEqual([
@@ -485,7 +517,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       recordedDates: new Set(september),
       lastReminderDate: "2026-09-09",
     });
-    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19");
     expect(row.recent.result.missed).not.toContain("2026-09-09");
     expect(row.improving).toBe(true);
   });
@@ -496,7 +528,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       attendance: runOf(september, "AAPPPP"),
       recordedDates: new Set(september),
     });
-    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19");
     expect(row.recent.basis).toBe("LAST_FEW_DAYS");
     expect(row.recent.result.required).toBe(4);
   });
@@ -526,7 +558,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       recordedDates: new Set(["2026-09-02", "2026-09-04"]),
       lastReminderDate: "2026-09-08",
     });
-    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19");
     expect(row.recent.result.verdict).toBe("NA");
     expect(row.improving).toBe(false);
   });
@@ -538,7 +570,7 @@ describe("recent form: not chasing people who have mended their ways", () => {
       recordedDates: new Set(september),
       lastReminderDate: "2026-03-04",
     });
-    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19");
     expect(row.recent.basis).toBe("LAST_FEW_DAYS");
   });
 
@@ -551,6 +583,6 @@ describe("recent form: not chasing people who have mended their ways", () => {
       attendance: runOf(september, "AAPPPP"),
       recordedDates: new Set(september),
     });
-    expect(evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18").improving).toBe(false);
+    expect(evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-19").improving).toBe(false);
   });
 });

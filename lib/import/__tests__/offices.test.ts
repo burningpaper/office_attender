@@ -42,14 +42,14 @@ describe("importing one office's workbook", () => {
   it("does not delete the other office's attendance", async () => {
     const { ctx, ct, jhb } = await twoOffices();
 
-    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-09-01", ct);
+    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-10-01", ct);
     const before = await ctx.db.select().from(s.attendance);
     expect(before.length).toBeGreaterThan(10_000);
 
     // The same workbook, imported as Johannesburg. Nobody in it is a Cape Town
     // person as far as that import is concerned - and Cape Town must survive.
     await ctx.db.delete(s.uploads);
-    const report = await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-09-01", jhb);
+    const report = await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-10-01", jhb);
 
     const ctIds = (
       await ctx.db.select({ id: s.employees.id }).from(s.employees).where(eq(s.employees.officeId, ct))
@@ -63,9 +63,9 @@ describe("importing one office's workbook", () => {
 
   it("keeps same-named people in different offices apart", async () => {
     const { ctx, ct, jhb } = await twoOffices();
-    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-09-01", ct);
+    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-10-01", ct);
     await ctx.db.delete(s.uploads);
-    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-09-01", jhb);
+    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-10-01", jhb);
 
     const zoes = await ctx.db
       .select()
@@ -79,9 +79,9 @@ describe("importing one office's workbook", () => {
 
   it("counts each office's roster separately", async () => {
     const { ctx, ct, jhb } = await twoOffices();
-    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-09-01", ct);
+    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-10-01", ct);
     await ctx.db.delete(s.uploads);
-    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-09-01", jhb);
+    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-10-01", jhb);
 
     for (const office of [ct, jhb]) {
       const people = await ctx.db
@@ -94,14 +94,14 @@ describe("importing one office's workbook", () => {
 
   it("files the upload against the office it was imported for", async () => {
     const { ctx, jhb } = await twoOffices();
-    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-09-01", jhb);
+    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-10-01", jhb);
     const [upload] = await ctx.db.select().from(s.uploads);
     expect(upload.officeId).toBe(jhb);
   }, 900_000);
 
   it("only rewrites employment windows for the office being imported", async () => {
     const { ctx, ct, jhb } = await twoOffices();
-    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-09-01", ct);
+    await importDeclining(ctx.db, buffer, "cape-town.xlsx", "2026-10-01", ct);
 
     const ctBefore = await ctx.db
       .select({ id: s.employees.id, first: s.employees.firstSeenDate, last: s.employees.lastSeenDate })
@@ -110,7 +110,7 @@ describe("importing one office's workbook", () => {
       .orderBy(s.employees.id);
 
     await ctx.db.delete(s.uploads);
-    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-09-01", jhb);
+    await importDeclining(ctx.db, buffer, "joburg.xlsx", "2026-10-01", jhb);
 
     const ctAfter = await ctx.db
       .select({ id: s.employees.id, first: s.employees.firstSeenDate, last: s.employees.lastSeenDate })
