@@ -31,6 +31,14 @@ export type EmployeeInput = {
   /** Marked as having left the company. */
   hasLeft?: boolean;
   /**
+   * When this person was last sent a reminder, if ever.
+   *
+   * Anchors the recency window: the question worth asking about somebody you
+   * have already written to is not "how has the month gone" but "have they
+   * come in since you asked".
+   */
+  lastReminderDate?: string | null;
+  /**
    * Days the register was kept for this office, whoever it was kept for.
    *
    * This is what tells a blank apart from a silence. If anybody in the office
@@ -91,6 +99,23 @@ export type DayDetail = {
   outsideEmployment: boolean;
 };
 
+/**
+ * How somebody has behaved lately, as opposed to cumulatively.
+ *
+ * A monthly fraction never forgives: miss the 2nd and the 4th and you are stuck
+ * at 4/6 however faithfully you attend for the rest of the month. This looks at
+ * a short recent window on its own, so somebody who has mended their ways can
+ * be seen to have done so.
+ */
+export type RecentForm = {
+  /** Which window was used, and why. */
+  basis: "SINCE_REMINDER" | "LAST_FEW_DAYS";
+  /** Required days are counted after this date, exclusive. Null when none. */
+  since: string | null;
+  /** Scored over the window only. NA when the window holds nothing judgeable. */
+  result: ComplianceResult;
+};
+
 export type EmployeeRow = {
   employeeId: number;
   displayName: string;
@@ -109,6 +134,13 @@ export type EmployeeRow = {
   twoWeek: ComplianceResult;
   longTerm: LongTermResult;
   lastAttended: string | null;
+  recent: RecentForm;
+  /**
+   * Non-compliant for the month, but has attended every required day in the
+   * recent window. Both halves matter: somebody already compliant is not
+   * "improving", and neither is somebody with nothing recorded lately.
+   */
+  improving: boolean;
 };
 
 /** A row plus the day-by-day detail the interface expands into. */

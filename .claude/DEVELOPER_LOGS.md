@@ -686,3 +686,47 @@ the top it announced "0 required days so far" for a month with three. It now tak
 largest denominator anyone has.
 
 Cape Town carries its 87 people; Johannesburg exists and is empty, waiting for a workbook.
+
+## 2026-09-23 — Recency, and the placeholder zeros underneath it
+
+A monthly fraction never forgives. Miss the 2nd and the 4th, mend your ways, attend every
+day for a fortnight, and it still reads 4/6 — so the chase list keeps chasing people who
+already responded to being chased. Three of Cape Town's twenty-seven were in exactly that
+position when the problem was first raised: `A A P P P P`.
+
+The fix is a second, much shorter window, judged on its own. Where somebody has been
+emailed, it runs from that email — because the question actually being asked is not "how
+has the month gone" but "you wrote to them, did they come in?". Where nobody has, it falls
+back to the last four required days, which is two ordinary weeks, counted in days rather
+than dates so a public holiday does not quietly halve the sample.
+
+It is scored by the same function as every other verdict. That was the one design decision
+worth making deliberately: the last time two code paths derived the same thing separately,
+the email cheerfully told somebody "0 missed" while the report called them non-compliant.
+Sharing `score()` means an excused day is excused in both, and a day nothing is known about
+is unknown in both, permanently.
+
+Deliberately not a decaying score. It would rank people beautifully and there is no way to
+explain it. The email quotes somebody's own days back at them, and "your recency-adjusted
+compliance is 0.71" is not a sentence anybody can check, where "you have been in every
+required day since the 9th" is.
+
+### What checking the work turned up
+
+Zero people flagged on the live data, against three a week earlier. Not a bug in the rule —
+the rule was right — but a bug underneath it.
+
+The September workbook was uploaded on the 8th with the whole month laid out in advance:
+real data to the 4th, and `FALSE` in every cell after it. Those became ordinary ABSENT rows.
+So each required day now arrives with everybody already marked absent, and only becomes
+true once somebody keeps the register. At half past nine this morning, fifty of fifty-three
+Cape Town staff were recorded absent for a day that had barely started — enough to cancel
+out anybody's recent good behaviour.
+
+It is the same mistake this project keeps meeting from new angles: silence being read as
+failure. It has been fixed for empty cells and for future dates in emails; it slipped
+through here because a predicted zero is a row like any other.
+
+The upload timestamp is the clean discriminator — anything dated after the file was
+uploaded was a prediction, not a record. Proposed rather than done: it deletes rows, and
+that is the user's call.

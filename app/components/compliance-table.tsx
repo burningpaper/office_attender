@@ -207,6 +207,18 @@ function Row({
                 {row.exemptionNote ?? "Exempt"}
               </span>
             )}
+            {row.improving && (
+              <span
+                title={
+                  row.recent.since
+                    ? `Every required day since ${row.recent.since}`
+                    : "Attended every recent required day"
+                }
+                className="ml-2 rounded bg-yes-bg px-1.5 py-0.5 text-[0.65rem] text-yes"
+              >
+                Improving
+              </span>
+            )}
             {!row.onRosterThisMonth && (
               <span className="ml-2 rounded bg-na-bg px-1.5 py-0.5 text-[0.65rem] text-na">
                 {row.hasLeft ? "Left" : "Not on this sheet"}

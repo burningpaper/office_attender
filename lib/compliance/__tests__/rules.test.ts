@@ -405,3 +405,152 @@ describe("taking somebody off tracking does not rewrite the past", () => {
     expect(monthlyCompliance(person, CALENDAR, "2026-10", "2026-10-31").verdict).toBe("EXEMPT");
   });
 });
+
+describe("recent form: not chasing people who have mended their ways", () => {
+  /** Mark a run of required days, oldest first, from a list of dates. */
+  const runOf = (dates: string[], pattern: string) =>
+    withAttendance(
+      Object.fromEntries(
+        dates.map((d, i) => [
+          d,
+          (pattern[i] === "P" ? "PRESENT" : "ABSENT") as AttendanceState,
+        ]),
+      ),
+    );
+
+  const september = requiredIn("2026-09"); // 2, 4, 9, 11, 16, 18, 23, 25, 30
+
+  it("flags somebody who missed early and has attended ever since", () => {
+    // Mark Haefele, from the real data: A A P P P P.
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: runOf(september, "AAPPPP"),
+      recordedDates: new Set(september),
+    });
+
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    expect(row.monthly.verdict).toBe("NO"); // still true for the month
+    expect(row.recent.result.verdict).toBe("YES");
+    expect(row.improving).toBe(true);
+  });
+
+  it("does not flag somebody who is still missing days", () => {
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: runOf(september, "PPAPAP"),
+      recordedDates: new Set(september),
+    });
+    expect(evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18").improving).toBe(false);
+  });
+
+  it("does not flag somebody who is already compliant", () => {
+    // Improving means they were worse before. Perfect is not improving.
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: runOf(september, "PPPPPP"),
+      recordedDates: new Set(september),
+    });
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    expect(row.monthly.verdict).toBe("YES");
+    expect(row.improving).toBe(false);
+  });
+
+  it("measures from the last reminder when there was one", () => {
+    /**
+     * Missed the 2nd and the 4th, was written to on the 8th, and has been in
+     * every day since. The month says 4/6; the question you actually asked was
+     * "did they come in after I wrote", and the answer is yes.
+     */
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: runOf(september, "AAPPPP"),
+      recordedDates: new Set(september),
+      lastReminderDate: "2026-09-08",
+    });
+
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    expect(row.recent.basis).toBe("SINCE_REMINDER");
+    expect(row.recent.since).toBe("2026-09-08");
+    expect(row.recent.result.attendedDates).toEqual([
+      "2026-09-09", "2026-09-11", "2026-09-16", "2026-09-18",
+    ]);
+    expect(row.improving).toBe(true);
+  });
+
+  it("does not count the day of the reminder itself", () => {
+    // Writing to somebody on a Wednesday cannot change that Wednesday.
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: runOf(september, "AAAPPP"),
+      recordedDates: new Set(september),
+      lastReminderDate: "2026-09-09",
+    });
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    expect(row.recent.result.missed).not.toContain("2026-09-09");
+    expect(row.improving).toBe(true);
+  });
+
+  it("falls back to the last few required days when nobody has written", () => {
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: runOf(september, "AAPPPP"),
+      recordedDates: new Set(september),
+    });
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    expect(row.recent.basis).toBe("LAST_FEW_DAYS");
+    expect(row.recent.result.required).toBe(4);
+  });
+
+  it("says nothing when the recent days were all excused", () => {
+    // Being on leave since the reminder is not evidence of having changed.
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: withAttendance({
+        "2026-09-02": "ABSENT",
+        "2026-09-04": "ABSENT",
+        "2026-09-09": "ABSENT_EXPLAINED",
+        "2026-09-11": "ABSENT_EXPLAINED",
+      }),
+      recordedDates: new Set(september),
+      lastReminderDate: "2026-09-08",
+    });
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-11");
+    expect(row.recent.result.verdict).toBe("NA");
+    expect(row.improving).toBe(false);
+  });
+
+  it("says nothing when the recent days have not been recorded yet", () => {
+    const person = employee({
+      firstSeenDate: "2026-09-01",
+      attendance: withAttendance({ "2026-09-02": "ABSENT", "2026-09-04": "ABSENT" }),
+      recordedDates: new Set(["2026-09-02", "2026-09-04"]),
+      lastReminderDate: "2026-09-08",
+    });
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    expect(row.recent.result.verdict).toBe("NA");
+    expect(row.improving).toBe(false);
+  });
+
+  it("ignores a reminder so old it says nothing about now", () => {
+    const person = employee({
+      firstSeenDate: "2026-03-01",
+      attendance: runOf(september, "AAPPPP"),
+      recordedDates: new Set(september),
+      lastReminderDate: "2026-03-04",
+    });
+    const row = evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18");
+    expect(row.recent.basis).toBe("LAST_FEW_DAYS");
+  });
+
+  it("never flags somebody exempt", () => {
+    const person = employee({
+      exemptions: [{
+        type: "REMOTE_LOCATION", rawText: "Stays in George",
+        effectiveFrom: null, effectiveTo: null, active: true,
+      }],
+      attendance: runOf(september, "AAPPPP"),
+      recordedDates: new Set(september),
+    });
+    expect(evaluateEmployee(person, CALENDAR, "2026-09", "2026-09-18").improving).toBe(false);
+  });
+});

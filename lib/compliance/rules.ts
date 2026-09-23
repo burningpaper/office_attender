@@ -22,6 +22,7 @@ import type {
   EmployeeRow,
   Exemption,
   LongTermResult,
+  RecentForm,
 } from "./types";
 
 const WEDNESDAY = 3;
@@ -429,6 +430,58 @@ export function completeMonthsFor(
   return months;
 }
 
+/**
+ * How many required days to look back over when nobody has been reminded.
+ *
+ * Four is two ordinary weeks of Wednesdays and Fridays. Counting days rather
+ * than a fortnight of calendar keeps the window meaningful through a public
+ * holiday, which would otherwise leave only two or three days to judge on.
+ */
+const RECENT_REQUIRED_DAYS = 4;
+
+/** Never reach further back than this, however sparse the calendar. */
+const RECENT_MAX_LOOKBACK_DAYS = 42;
+
+/**
+ * How somebody has behaved lately.
+ *
+ * The window is the required days since their last reminder, because that is
+ * the question actually being asked: you wrote to them, did they come in? With
+ * nobody to have reminded them, it falls back to the last few required days.
+ *
+ * Scored with the same function as every other verdict, so the two can never
+ * drift apart - a day excused here is excused there, and a day nothing is known
+ * about is unknown in both.
+ */
+export function recentForm(
+  employee: EmployeeInput,
+  calendar: CalendarDay[],
+  asOf: string,
+): RecentForm {
+  const floor = addDays(asOf, -RECENT_MAX_LOOKBACK_DAYS);
+  const reminder = employee.lastReminderDate ?? null;
+
+  const elapsed = requiredDaysFor(
+    employee,
+    calendar,
+    { start: floor, end: asOf },
+    asOf,
+  );
+
+  if (reminder && reminder >= floor) {
+    // Strictly after: a reminder cannot have changed that same day's behaviour.
+    const since = elapsed.filter((date) => date > reminder);
+    return { basis: "SINCE_REMINDER", since: reminder, result: score(employee, since) };
+  }
+
+  const last = elapsed.slice(-RECENT_REQUIRED_DAYS);
+  return {
+    basis: "LAST_FEW_DAYS",
+    since: last.length > 0 ? addDays(last[0], -1) : null,
+    result: score(employee, last),
+  };
+}
+
 /** The most recent day they were physically in the office. */
 export function lastAttended(employee: EmployeeInput): string | null {
   let latest: string | null = null;
@@ -446,6 +499,9 @@ export function evaluateEmployee(
   asOf: string,
 ): EmployeeRow {
   const exemption = activeExemption(employee, asOf);
+  const monthly = monthlyCompliance(employee, calendar, month, asOf);
+  const recent = recentForm(employee, calendar, asOf);
+
   return {
     employeeId: employee.id,
     displayName: employee.displayName,
@@ -454,10 +510,17 @@ export function evaluateEmployee(
     hasLeft: employee.hasLeft ?? false,
     onRosterThisMonth: true, // set by the loader, which knows the month's roster
 
-    monthly: monthlyCompliance(employee, calendar, month, asOf),
+    monthly,
     twoWeek: twoWeekCompliance(employee, calendar, asOf),
     longTerm: longTermCompliance(employee, calendar, asOf),
     lastAttended: lastAttended(employee),
+    recent,
+    /**
+     * Both halves are needed. Somebody already compliant is not improving, and
+     * neither is somebody whose recent days were all excused or never recorded
+     * - that is an absence of evidence, not evidence of change.
+     */
+    improving: monthly.verdict === "NO" && recent.result.verdict === "YES",
   };
 }
 

@@ -29,6 +29,8 @@ function row(name: string, overrides: Partial<EmployeeRowWithDays> = {}): Employ
     twoWeek: result("NO"),
     longTerm: { ...result("NO"), wednesdayAverage: 0, fridayAverage: 0, monthsCounted: 3 },
     lastAttended: null,
+    recent: { basis: "LAST_FEW_DAYS", since: null, result: result("NA") },
+    improving: false,
     monthDays: [],
     ...overrides,
   };
@@ -123,6 +125,8 @@ describe("rendering", () => {
     employeeId: 1,
     displayName: "Nadine Pillay",
     email: "nadine@x.com",
+    improving: false,
+    recentNote: null,
     attended: ["2026-08-05"],
     missed: ["2026-08-26", "2026-08-28"],
     excused: ["2026-08-12"],
@@ -212,5 +216,51 @@ describe("the dates quoted come from the verdict, not a second calculation", () 
     const { recipients } = buildRecipients([person], "TWO_WEEK", emails([[12, "s@x.com"]]));
     expect(recipients[0].attended).toEqual(["2026-09-09"]);
     expect(recipients[0].missed).toEqual(["2026-09-11"]);
+  });
+});
+
+describe("flagging people who have mended their ways", () => {
+  it("marks them improving and explains the window", () => {
+    const person = row("Mark Haefele", {
+      monthly: {
+        verdict: "NO", attended: 4, required: 6, excused: 0,
+        attendedDates: ["2026-09-09", "2026-09-11", "2026-09-16", "2026-09-18"],
+        excusedDates: [], missed: ["2026-09-02", "2026-09-04"], unrecorded: [],
+      },
+      improving: true,
+      recent: {
+        basis: "SINCE_REMINDER",
+        since: "2026-09-08",
+        result: {
+          verdict: "YES", attended: 4, required: 4, excused: 0,
+          attendedDates: [], excusedDates: [], missed: [], unrecorded: [],
+        },
+      },
+    });
+
+    const { recipients } = buildRecipients([person], "MONTHLY", emails([[12, "m@x.com"]]));
+    expect(recipients[0].improving).toBe(true);
+    expect(recipients[0].recentNote).toBe(
+      "4 of 4 recent required days, since the reminder on 2026-09-08",
+    );
+  });
+
+  it("keeps them on the list rather than quietly dropping them", () => {
+    // Flagged, not removed - whether to write is still your call.
+    const person = row("Mark Haefele", { improving: true });
+    const { recipients, excluded } = buildRecipients(
+      [person], "MONTHLY", emails([[12, "m@x.com"]]),
+    );
+    expect(recipients).toHaveLength(1);
+    expect(excluded).toHaveLength(0);
+  });
+
+  it("says nothing about somebody with no recent days to judge", () => {
+    const person = row("Quiet Person");
+    const { recipients } = buildRecipients(
+      [person], "MONTHLY", emails([[person.employeeId, "q@x.com"]]),
+    );
+    expect(recipients[0].improving).toBe(false);
+    expect(recipients[0].recentNote).toBeNull();
   });
 });

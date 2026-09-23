@@ -207,6 +207,14 @@ export function EmailClient({
             <>
               <span className="tabular font-medium text-foreground">{selected.length}</span>
               {" "}will be emailed
+              {list && list.recipients.some((r) => r.improving) && (
+                <>
+                  {" "}·{" "}
+                  <span className="text-yes">
+                    {list.recipients.filter((r) => r.improving).length} improving
+                  </span>
+                </>
+              )}
               {list && list.excluded.length > 0 && (
                 <> · <span className="text-subtle">{list.excluded.length} excluded</span></>
               )}
@@ -323,7 +331,9 @@ function Recipients({ list, deselected, onToggle }: {
   return (
     <section className="rounded-lg border border-border-soft bg-surface">
       <ul className="divide-y divide-border-soft">
-        {list.recipients.map((r) => {
+        {[...list.recipients]
+          .sort((a, b) => Number(a.improving) - Number(b.improving))
+          .map((r) => {
           const on = !deselected.has(r.employeeId);
           return (
             <li key={r.employeeId} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
@@ -335,10 +345,21 @@ function Recipients({ list, deselected, onToggle }: {
                 className="h-3.5 w-3.5"
               />
               <span className={on ? "" : "text-subtle line-through"}>{r.displayName}</span>
+              {r.improving && (
+                <span
+                  title={r.recentNote ?? undefined}
+                  className="rounded bg-yes-bg px-1.5 py-0.5 text-[0.65rem] text-yes"
+                >
+                  Improving
+                </span>
+              )}
               <span className="text-xs text-subtle">{r.email}</span>
               <span className="tabular ml-auto text-xs text-muted">
                 {r.attended.length} attended · <span className="text-no">{r.missed.length} missed</span>
                 {r.excused.length > 0 && <span className="text-subtle"> · {r.excused.length} excused</span>}
+                {r.improving && r.recentNote && (
+                  <span className="block text-[0.65rem] text-yes">{r.recentNote}</span>
+                )}
               </span>
             </li>
           );

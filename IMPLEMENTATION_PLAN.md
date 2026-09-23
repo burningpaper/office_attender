@@ -389,3 +389,28 @@ Notes from the build:
 **Still to decide:** individual logins. There is one shared password, so "who recorded
 this" cannot be answered yet. That matters more now that several people in two cities will
 be entering data.
+
+## Stage 11: Recent form — not chasing people who have mended their ways
+Goal: A monthly fraction is cumulative, so an early miss follows somebody all month however
+well they behave afterwards. Add a recency signal so the chase list reflects current
+behaviour rather than the worst thing somebody did on the 2nd.
+Decisions taken (2026-09-22): the window is the required days **since the last reminder was
+sent**, falling back to the **last four required days** for anybody never emailed. People
+who are improving stay on the email list, flagged, rather than being removed.
+
+Success Criteria:
+- Somebody who missed early and has attended every required day since shows as Improving.
+- The window is measured from their last reminder where one exists.
+- All-excused or not-yet-recorded recent days mean "cannot tell", never "improving".
+- The monthly verdict is unchanged — it is still true, just no longer the only thing shown.
+- Real examples pass: Mark Haefele (A A P P P P) and Matthew van Niekerk (A P P P P P)
+  are flagged; somebody still missing is not.
+Status: **Complete** — 15 new tests (315 total).
+
+Scored with the same `score()` the monthly verdict uses, so the two can never disagree
+about what an excused or unrecorded day means. An exempt person is never "improving", and
+neither is somebody already compliant.
+
+Deliberately not a weighted or decaying score. It would rank people well, but the email
+quotes somebody's own days back to them, and "your recency-adjusted compliance is 0.71" is
+not a sentence anybody can check. "You have been in every required day since the 9th" is.

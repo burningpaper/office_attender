@@ -5,7 +5,7 @@
  * this is the only place that knows about tables.
  */
 
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as s from "../db/schema";
 import { evaluateEmployee, requiredDaysFor } from "./rules";
@@ -114,6 +114,31 @@ export async function loadEmployeeRows(
     detail.set(row.date, row);
   }
 
+  /**
+   * When each person was last written to.
+   *
+   * Only sends that actually went out count - a failed one never reached them,
+   * so nothing can be expected to have changed because of it.
+   */
+  const reminders = employeeIds.length
+    ? await db
+        .select({
+          employeeId: s.emailSends.employeeId,
+          lastSentAt: sql<string>`max(${s.emailSends.sentAt})::date::text`,
+        })
+        .from(s.emailSends)
+        .where(
+          and(
+            inArray(s.emailSends.employeeId, employeeIds),
+            eq(s.emailSends.status, "SENT"),
+          ),
+        )
+        .groupBy(s.emailSends.employeeId)
+    : [];
+  const lastReminderByEmployee = new Map(
+    reminders.map((r) => [r.employeeId, r.lastSentAt]),
+  );
+
   const exemptionsByEmployee = new Map<number, typeof exemptions>();
   for (const e of exemptions) {
     const list = exemptionsByEmployee.get(e.employeeId) ?? [];
@@ -137,6 +162,7 @@ export async function loadEmployeeRows(
       attendance: attendanceByEmployee.get(employee.id) ?? new Map(),
       hasLeft: employee.status === "DEPARTED",
       recordedDates,
+      lastReminderDate: lastReminderByEmployee.get(employee.id) ?? null,
     };
     const row = evaluateEmployee(input, calendar, month, asOf);
 

@@ -36,6 +36,14 @@ export type Recipient = {
   employeeId: number;
   displayName: string;
   email: string;
+  /**
+   * Non-compliant for the month, but has attended every required day since you
+   * last wrote to them. Still on the list - you may want to say well done, or
+   * nothing at all - but flagged so the list can be worked worst-first.
+   */
+  improving: boolean;
+  /** Plain-English summary of the recent window, for the interface. */
+  recentNote: string | null;
   /** Required days in the window they were present. */
   attended: string[];
   /** Required days in the window they missed, with no explanation. */
@@ -53,6 +61,21 @@ export type RecipientList = {
   recipients: Recipient[];
   excluded: ExcludedRecipient[];
 };
+
+/**
+ * "Every required day since the 8th" reads better than "4/4 SINCE_REMINDER",
+ * and is something you could paste into a message to somebody.
+ */
+function describeRecent(row: EmployeeRowWithDays): string | null {
+  const { basis, since, result } = row.recent;
+  if (result.required === 0) return null;
+
+  const days = `${result.attended} of ${result.required} recent required day${result.required === 1 ? "" : "s"}`;
+  if (basis === "SINCE_REMINDER" && since) {
+    return `${days}, since the reminder on ${since}`;
+  }
+  return days;
+}
 
 function resultFor(row: EmployeeRowWithDays, category: EmailCategory) {
   if (category === "TWO_WEEK") return row.twoWeek;
@@ -122,6 +145,8 @@ export function buildRecipients(
       employeeId: row.employeeId,
       displayName: row.displayName,
       email,
+      improving: row.improving,
+      recentNote: describeRecent(row),
       attended: result.attendedDates,
       missed: result.missed,
       excused: result.excusedDates,

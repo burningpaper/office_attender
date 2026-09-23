@@ -28,6 +28,8 @@ function row(
     twoWeek: result("YES"),
     longTerm: { ...result("YES"), wednesdayAverage: 3, fridayAverage: 3, monthsCounted: 3 },
     lastAttended: "2026-08-28",
+    recent: { basis: "LAST_FEW_DAYS", since: null, result: result("NA") },
+    improving: false,
     monthDays: [],
     ...overrides,
   };
