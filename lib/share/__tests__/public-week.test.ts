@@ -117,6 +117,42 @@ describe("what it shows", () => {
   }, 300_000);
 });
 
+describe("a day the office was shut", () => {
+  it("says so, instead of showing everybody as absent", async () => {
+    // Foundation Day, 23 September 2026: the whole company was out doing
+    // community work. The page read "0 of 44 in on Wednesday" until somebody
+    // who knew that said so.
+    const ctx = await loaded();
+    await ctx.db
+      .insert(s.officeClosures)
+      .values({ officeId: ctx.officeId, date: "2026-09-23", label: "Foundation Day" });
+
+    const week = await loadPublicWeek(ctx.db, "2026-10-01");
+    const office = week.offices.find((o) => o.days[0].kind === "CLOSED")!;
+    expect(office).toBeDefined();
+
+    const wednesday = office.days[0];
+    expect(wednesday.kind === "CLOSED" && wednesday.label).toBe("Foundation Day");
+
+    // Nobody is absent on a day there was nothing to attend.
+    expect(office.people.every((p) => p.states[0] === "CLOSED")).toBe(true);
+    expect(office.attended[0]).toBe(0);
+    expect(office.expected[0]).toBe(0);
+  }, 300_000);
+
+  it("leaves the other day of that week alone", async () => {
+    const ctx = await loaded();
+    await ctx.db
+      .insert(s.officeClosures)
+      .values({ officeId: ctx.officeId, date: "2026-09-23", label: "Foundation Day" });
+
+    const week = await loadPublicWeek(ctx.db, "2026-10-01");
+    const office = week.offices.find((o) => o.days[0].kind === "CLOSED")!;
+    expect(office.days[1].kind).toBe("OPEN");
+    expect(office.expected[1]).toBeGreaterThan(0);
+  }, 300_000);
+});
+
 describe("what it must never show", () => {
   it("carries no surname, no comment and no email anywhere in its output", async () => {
     const ctx = await loaded();

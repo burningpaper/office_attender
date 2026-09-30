@@ -36,6 +36,7 @@ const MARK: Record<PublicDayState, { glyph: string; label: string; className: st
   OUT: { glyph: "–", label: "Not in", className: "text-[var(--subtle)]" },
   EXCUSED: { glyph: "○", label: "Excused", className: "text-[var(--exempt)]" },
   NO_RECORD: { glyph: "·", label: "Not recorded", className: "text-[var(--subtle)] opacity-50" },
+  CLOSED: { glyph: "—", label: "Office closed", className: "text-[var(--subtle)] opacity-40" },
 };
 
 function Cell({ state }: { state: PublicDayState }) {
@@ -109,8 +110,13 @@ export default async function PublicWeekPage({
                         >
                           {label.weekday}
                           <span className="block text-xs font-normal text-[var(--subtle)]">
-                            {day.kind === "CLOSED" ? day.label : label.date}
+                            {label.date}
                           </span>
+                          {day.kind === "CLOSED" && (
+                            <span className="mt-0.5 block text-xs font-normal text-[var(--exempt)]">
+                              {day.label}
+                            </span>
+                          )}
                         </th>
                       );
                     })}
@@ -139,7 +145,17 @@ export default async function PublicWeekPage({
 
       <footer className="mt-12 border-t border-[var(--border)] pt-5 text-xs leading-relaxed text-[var(--subtle)]">
         <p className="mb-2 flex flex-wrap gap-x-5 gap-y-1">
-          {(["IN", "OUT", "EXCUSED", "NO_RECORD"] as const).map((state) => (
+          {(
+            [
+              "IN",
+              "OUT",
+              "EXCUSED",
+              "NO_RECORD",
+              ...(week.offices.some((o) => o.days.some((d) => d.kind === "CLOSED"))
+                ? (["CLOSED"] as const)
+                : []),
+            ] as const
+          ).map((state) => (
             <span key={state}>
               <span className={MARK[state].className}>{MARK[state].glyph}</span>{" "}
               {MARK[state].label}

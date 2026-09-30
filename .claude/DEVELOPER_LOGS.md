@@ -797,3 +797,34 @@ forgot to configure it must not publish the company's attendance by default.
 Last completed week, never the current one, so a page people are sent does not
 change under them and a register still being filled in is never mistaken for a
 roomful of absentees.
+
+## 2026-09-30 — Foundation Day
+
+The public page went up reporting "Cape Town: 0 of 44 in on Wednesday". Flagged
+it as implausible — a register saved without anybody ticked, most likely.
+
+It was not a fault at all. The 23rd was Foundation Day: the whole company was
+out doing community work. Nobody was in the office because there was nothing to
+be in the office for.
+
+Recorded as an office closure for both sites, which is what that table has been
+for since the public-holiday work. The compliance engine drops a closed day from
+the denominator per office, so twenty-eight Cape Town people stop carrying an
+absence they never earned, and Durban's nineteen present records simply stop
+being counted rather than being deleted.
+
+Durban is the interesting half. It recorded nineteen people in on a day the
+company was out, which is either a register keeper counting community work as
+attendance or a different local arrangement. Worth asking rather than guessing,
+so the closure was confirmed before being applied.
+
+The page needed a change too. A shut office rendered as a column of "not
+recorded" against every name, which invites the reader to wonder who failed to
+fill it in when the answer is that there was nothing to fill in. Closed is now
+its own state, labelled with the reason in the column header, and the day is
+left out of the summary line entirely.
+
+The recurring theme of this project, one more time and from a new direction:
+an absence of attendance is not evidence of absence. This is the first version
+of it that no amount of care in the code would have caught, because the missing
+information was in somebody's head.

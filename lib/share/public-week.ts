@@ -27,8 +27,15 @@ type Db = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
  * `EXCUSED` carries no reason with it, by design. That a sanctioned reason
  * exists is fair to show - somebody on approved leave should not read as
  * having simply not turned up - but what the reason was is nobody's business.
+ *
+ * `CLOSED` is a fact about the day rather than the person. It is distinct from
+ * `NO_RECORD` because a column of "not recorded" under a shut office invites
+ * the reader to wonder who failed to fill it in, when the answer is that there
+ * was nothing to fill in. The 23rd of September was Foundation Day: the whole
+ * company was out doing community work, and the page read "0 of 44 in on
+ * Wednesday" until somebody who knew that said so.
  */
-export type PublicDayState = "IN" | "OUT" | "EXCUSED" | "NO_RECORD";
+export type PublicDayState = "IN" | "OUT" | "EXCUSED" | "NO_RECORD" | "CLOSED";
 
 export type PublicPerson = {
   /** A first name, with a surname initial only where one is needed. */
@@ -166,7 +173,7 @@ export async function loadPublicWeek(db: Db, asOf: string): Promise<PublicWeek> 
       name: names[index],
       states: days.map((day) =>
         day.kind === "CLOSED"
-          ? "NO_RECORD"
+          ? "CLOSED"
           : publicStateOf(byPersonDate.get(`${person.id}|${day.date}`)),
       ),
     }));
@@ -179,7 +186,11 @@ export async function loadPublicWeek(db: Db, asOf: string): Promise<PublicWeek> 
       days,
       people,
       attended: days.map((_, i) => people.filter((p) => p.states[i] === "IN").length),
-      expected: days.map((_, i) => people.filter((p) => p.states[i] !== "EXCUSED").length),
+      expected: days.map((day, i) =>
+        day.kind === "CLOSED"
+          ? 0
+          : people.filter((p) => p.states[i] !== "EXCUSED").length,
+      ),
     });
   }
 
