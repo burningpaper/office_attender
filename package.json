@@ -20,7 +20,8 @@
     "report": "tsx scripts/report.ts",
     "reasons:classify": "tsx scripts/classify-reasons.ts",
     "office": "tsx scripts/office.ts",
-    "attendance:drop-unhappened": "tsx scripts/drop-unhappened-rows.ts"
+    "attendance:drop-unhappened": "tsx scripts/drop-unhappened-rows.ts",
+    "share:token": "tsx scripts/share-token.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

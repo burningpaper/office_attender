@@ -414,3 +414,41 @@ neither is somebody already compliant.
 Deliberately not a weighted or decaying score. It would rank people well, but the email
 quotes somebody's own days back to them, and "your recency-adjusted compliance is 0.71" is
 not a sentence anybody can check. "You have been in every required day since the 9th" is.
+
+## Stage 12: The public week
+Goal: A page anybody in the company can open without signing in, showing last
+completed week's attendance for everyone tracked, by first name only.
+
+The only page in the system that shows data to people who have not authenticated,
+so it is built subtractively: its loader selects the columns it may show rather
+than filtering a richer row down. Nothing can leak by being forgotten.
+
+- `lib/share/public-week.ts` — its own loader. Selects first name, office and the
+  two day states. Never selects `attendance.comment`, surname, or email. Not a
+  view over `loadWeek`, which returns all three.
+- `lib/share/display-names.ts` — first names, with a surname initial added only
+  where a first name is shared. Seven people in Cape Town need one; sixty-one
+  do not. Tested against the real roster.
+- `lib/share/token.ts` — reads `PUBLIC_SHARE_TOKEN`, compares in constant time.
+  A wrong or missing token is a 404, not a 403: the path should not confirm
+  itself to somebody guessing.
+- `app/share/[token]/page.tsx` — the page. Grouped by office, a column per
+  required day, present / absent / excused. No reasons, ever.
+- `proxy.ts` — `/share/` added to the public paths, and `X-Robots-Tag: noindex`
+  on the response. `robots.txt` disallows it too.
+- `npm run share:token` — generates a token and prints the URL.
+
+Success Criteria:
+- A correct token renders the week; a wrong one, an absent one, and an empty
+  `PUBLIC_SHARE_TOKEN` all 404.
+- The rendered HTML contains no surname of anybody whose first name is unique,
+  no absence comment, and no email address. Asserted against the real database.
+- Three Matthews are distinguishable; everybody else is a bare first name.
+- The page shows the last *completed* week, so it never displays a day whose
+  register is still being filled in.
+Status: **Complete** — 21 new tests (340 total).
+
+Verified against the live database rather than a fixture: the rendered HTML
+contains no surname of anybody with a unique first name, no absence comment, no
+exemption note and no email address. A wrong token 404s, a correct one renders,
+and an unset PUBLIC_SHARE_TOKEN 404s for everybody.

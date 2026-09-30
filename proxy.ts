@@ -19,7 +19,18 @@ import {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isPublicPath(pathname)) return NextResponse.next();
+  if (isPublicPath(pathname)) {
+    const response = NextResponse.next();
+    /**
+     * The shared week is meant to be passed around a company, not found. The
+     * page asks for noindex in its metadata too; this is here for the crawlers
+     * that read headers and never parse the document.
+     */
+    if (pathname.startsWith("/share/")) {
+      response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
+    return response;
+  }
 
   const secret = process.env.AUTH_SECRET;
   if (!secret) {

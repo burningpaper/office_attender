@@ -748,3 +748,52 @@ improving. A third of the chase list had already responded to being chased.
 The 694 rows already in the database need `npm run attendance:drop-unhappened -- --run`.
 It journals every removal to attendance_history first, never touches a PRESENT row or
 anything typed into the register, and is safe to re-run.
+
+## 2026-09-30 — A page for everybody
+
+Attendance has so far been read by the handful of people who chase it. This
+publishes last week's to the whole company on a link with no login, which is a
+different kind of page and was built like one.
+
+First names, because a colleague scanning the list needs to recognise themselves
+and a stranger forwarded the link should not receive a staff directory. That is
+not anonymity and was not sold as such — a sixty-eight person office knows who
+Mark is, and it has to, or the page is useless. What it buys is that the page
+cannot be tied to identifiable individuals by somebody outside the company.
+
+First names alone turned out to be wrong, though. Cape Town has three Matthews,
+two Bens and two Jasons, and three rows reading "Matthew — missed both days"
+conceal nothing while misattributing to two innocent people. So a surname
+initial, added only to the seven who need one: Matthew B., Matthew R., Matthew
+v.N. The particle keeps its own case, because "V.N." is a small act of vandalism
+against somebody's name. If initials still collide the full surname appears, and
+only for that pair.
+
+### Built subtractively
+
+The loader is not a view over `loadWeek`. That function returns display names
+and absence comments because the register screen needs both, and a filter over
+it is one careless spread away from putting "at his father's funeral" on a URL
+that cannot be recalled. The public loader selects the three columns it may show
+and has no access to the rest.
+
+The test that matters is the negative one, and it runs against the real database
+rather than a fixture: no surname of anybody with a unique first name, no
+comment, no exemption note, no email address anywhere in the output. It caught
+its own first draft — a substring search flagged "Khan" inside "Khanyisa", which
+would have been a test that cried wolf and therefore a test that got deleted.
+It now asserts the shape instead: every rendered name is a bare first name
+unless its owner genuinely shares one.
+
+### The link
+
+A token in the path rather than a guessable `/attendance`. It stops the page
+being found; it does nothing once the link is forwarded, which is the deal a
+shareable link makes and the reason the page shows so little. A wrong token
+gets a 404 rather than a 403, because a 403 confirms the path to somebody
+guessing. An unset `PUBLIC_SHARE_TOKEN` refuses everybody — a deployment that
+forgot to configure it must not publish the company's attendance by default.
+
+Last completed week, never the current one, so a page people are sent does not
+change under them and a register still being filled in is never mistaken for a
+roomful of absentees.

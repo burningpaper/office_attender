@@ -147,6 +147,12 @@ const PUBLIC_PATHS = ["/login", "/api/auth/login"];
 
 export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
+  /**
+   * The shared week. It carries its own secret in the path, checked by the page
+   * itself - the proxy waving it through only means "this one does not need a
+   * session", not "this one is unprotected".
+   */
+  if (pathname.startsWith("/share/")) return true;
   // Next's own assets, and the favicon.
   return (
     pathname.startsWith("/_next/") ||
