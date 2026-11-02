@@ -15,11 +15,18 @@ describe("weeks", () => {
     expect(weekStart("2026-09-13")).toBe("2026-09-07");
   });
 
-  it("picks out the two days that count", () => {
-    expect(requiredDaysOfWeek("2026-09-07")).toEqual({
-      wednesday: "2026-09-09",
-      friday: "2026-09-11",
-    });
+  it("picks out the days that count", () => {
+    expect(requiredDaysOfWeek("2026-09-07")).toEqual(["2026-09-09", "2026-09-11"]);
+  });
+
+  it("grows a Thursday from 5 November 2026, and not before", () => {
+    // The week of the change holds all three; the one before it holds two.
+    expect(requiredDaysOfWeek("2026-10-26")).toEqual(["2026-10-28", "2026-10-30"]);
+    expect(requiredDaysOfWeek("2026-11-02")).toEqual([
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06",
+    ]);
   });
 
   it("labels a week readably, including across a month boundary", () => {

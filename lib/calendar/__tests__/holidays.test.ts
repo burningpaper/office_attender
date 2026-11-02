@@ -76,19 +76,31 @@ describe("the calendar fixes the spec's public-holiday bug", () => {
     }
   });
 
-  it("counts only Wednesdays and Fridays as required", () => {
+  it("counts only the cadence's weekdays as required", () => {
+    // Wednesday and Friday until 5 November 2026, Thursday as well after it.
     const required = [...cal.values()].filter((d) => d.isRequiredDay);
-    expect(required.every((d) => dow(d.date) === 3 || dow(d.date) === 5)).toBe(true);
+    expect(
+      required.every((d) =>
+        d.date < "2026-11-05"
+          ? dow(d.date) === 3 || dow(d.date) === 5
+          : dow(d.date) === 3 || dow(d.date) === 4 || dow(d.date) === 5,
+      ),
+    ).toBe(true);
     expect(required.some((d) => d.dayType !== "WORKING")).toBe(false);
+
+    // No Thursday before the change; every Thursday after it, holidays aside.
+    const octoberThursdays = required.filter((d) => d.date.startsWith("2026-10") && dow(d.date) === 4);
+    expect(octoberThursdays).toHaveLength(0);
   });
 
-  it("December has only seven required days - both holidays land on them", () => {
+  it("December loses two required days to the holidays that land on them", () => {
     // 16 Dec is a Wednesday and 25 Dec a Friday in 2026. Worth knowing: this is
-    // the month where "average 3 Wednesdays and 3 Fridays" gets hard to reach.
+    // the month where "average 3 of each required weekday" gets hard to reach -
+    // four Wednesdays, five Thursdays and three Fridays survive.
     const dec = [...cal.values()].filter(
       (d) => d.date.startsWith("2026-12") && d.isRequiredDay,
     );
-    expect(dec).toHaveLength(7);
+    expect(dec).toHaveLength(12);
     expect(cal.get("2026-12-16")!.isRequiredDay).toBe(false);
     expect(cal.get("2026-12-25")!.isRequiredDay).toBe(false);
   });

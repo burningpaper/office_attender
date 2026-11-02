@@ -8,6 +8,7 @@
 
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { describeCadence } from "@/lib/calendar/cadence";
 import { db } from "@/lib/db/client";
 import { loadPublicWeek, type PublicDayState } from "@/lib/share/public-week";
 import { isValidShareToken } from "@/lib/share/token";
@@ -60,6 +61,14 @@ export default async function PublicWeekPage({
   if (!isValidShareToken(token)) notFound();
 
   const week = await loadPublicWeek(db, new Date().toISOString().slice(0, 10));
+
+  /**
+   * The cadence is described as of the last day the table shows, not the
+   * Monday. The week containing 5 November 2026 holds a required Thursday
+   * while the cadence on its Monday still said two days.
+   */
+  const lastDayShown =
+    week.offices.flatMap((o) => o.days.map((d) => d.date)).sort().pop() ?? week.monday;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
@@ -162,7 +171,10 @@ export default async function PublicWeekPage({
             </span>
           ))}
         </p>
-        <p>Required days are Wednesday and Friday. This page is not indexed by search engines.</p>
+        <p>
+          Required days are {describeCadence(lastDayShown, false)}. This page is not indexed by
+          search engines.
+        </p>
       </footer>
     </main>
   );

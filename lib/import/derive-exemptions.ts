@@ -45,22 +45,31 @@ export function deriveExemption(note: string): DerivedExemption | null {
 
   if (WFH.test(text)) {
     /**
-     * Only a blanket arrangement excuses the required days. An approval naming
-     * specific days is scoped to those days, and Wednesday and Friday are the
-     * only ones that count.
+     * A blanket arrangement excuses the required days. One naming particular
+     * weekdays does not, however many of them are required days, because an
+     * exemption here is all-or-nothing: there is nowhere to record "excused on
+     * Thursdays and expected on the other two". Treating "WFH Thursdays" as a
+     * standing exemption would quietly excuse Wednesday and Friday as well.
+     *
+     * So a note naming days is recorded and flagged, never acted on. This was
+     * latent before 5 November 2026 - "WFH Wednesdays" would have blanket
+     * exempted somebody even then - and Thursday becoming a required day is
+     * what made it matter: exactly one person has such a note.
      */
-    const namesARequiredDay = /\b(wednesday|weds?|friday|fri)\b/i.test(text);
-    const namesAnyWeekday =
-      /\b(monday|mon|tuesday|tues?|wednesday|weds?|thursday|thurs?|friday|fri)\b/i.test(text);
+    const named = text.match(
+      /\b(monday|mon|tuesday|tues?|wednesday|weds?|thursday|thurs?|friday|fri)\b/gi,
+    );
 
-    if (namesAnyWeekday && !namesARequiredDay) {
+    if (named) {
+      const days = [...new Set(named.map((d) => d.toLowerCase()))].join(", ");
       return {
         type: "APPROVED_WFH",
         rawText: text,
         exempts: false,
         reviewReason:
-          `"${text}" covers a day that is not a required day, so it does not excuse ` +
-          `Wednesday or Friday attendance. Recorded, but not treated as an exemption.`,
+          `"${text}" names particular days (${days}). An exemption here applies to every ` +
+          `required day or none, so this is recorded but not acted on - it would otherwise ` +
+          `excuse the days it says nothing about. Decide per person whether they are excused.`,
       };
     }
 

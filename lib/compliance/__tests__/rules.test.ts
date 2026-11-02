@@ -367,12 +367,15 @@ describe("long-term compliance", () => {
     });
     const result = longTermCompliance(person, CALENDAR, "2026-05-31");
     expect(result.monthsCounted).toBe(3);
-    expect(result.wednesdayAverage).toBeGreaterThanOrEqual(3);
-    expect(result.fridayAverage).toBeGreaterThanOrEqual(3);
+    expect(result.perWeekday.map((d) => d.weekday)).toEqual([3, 5]); // Wed, Fri
+    for (const day of result.perWeekday) {
+      expect(day.average, `weekday ${day.weekday}`).toBeGreaterThanOrEqual(3);
+      expect(day.judged).toBe(true);
+    }
     expect(result.verdict).toBe("YES");
   });
 
-  it("fails when only one of the two averages is met", () => {
+  it("fails when only one of the averages is met", () => {
     // Every Wednesday, never a Friday.
     const wednesdaysOnly = Object.fromEntries(
       ["2026-03", "2026-04", "2026-05"]
@@ -386,9 +389,102 @@ describe("long-term compliance", () => {
       attendance: withAttendance(wednesdaysOnly),
     });
     const result = longTermCompliance(person, CALENDAR, "2026-05-31");
-    expect(result.wednesdayAverage).toBeGreaterThanOrEqual(3);
-    expect(result.fridayAverage).toBe(0);
+    const average = (weekday: number) =>
+      result.perWeekday.find((d) => d.weekday === weekday)!.average;
+    expect(average(3)).toBeGreaterThanOrEqual(3); // Wednesdays
+    expect(average(5)).toBe(0); // never a Friday
     expect(result.verdict).toBe("NO");
+  });
+});
+
+describe("the cadence changing under a live system", () => {
+  /**
+   * The thing that must not happen: October moving.
+   *
+   * Thursday became a required day on 5 November 2026. A report on October has
+   * to go on saying what October's rule said, because somebody who attended
+   * every required day that month did not retrospectively miss four Thursdays.
+   */
+  it("does not hold October's Thursdays against anybody", () => {
+    const october = requiredIn("2026-10");
+    expect(october).toHaveLength(9);
+    expect(october.some((d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 4)).toBe(false);
+
+    // Present on every required day of October, and absent every Thursday.
+    const thursdays = ["2026-10-01", "2026-10-08", "2026-10-15", "2026-10-22", "2026-10-29"];
+    const person = employee({
+      lastSeenDate: "2026-12-31",
+      attendance: withAttendance({
+        ...Object.fromEntries(october.map((d) => [d, "PRESENT" as AttendanceState])),
+        ...Object.fromEntries(thursdays.map((d) => [d, "ABSENT" as AttendanceState])),
+      }),
+      recordedDates: new Set([...october, ...thursdays]),
+    });
+
+    const result = monthlyCompliance(person, CALENDAR, "2026-10", "2026-11-02");
+    expect(result.verdict).toBe("YES");
+    expect(result.required).toBe(9);
+    expect(result.missed).toEqual([]);
+  });
+
+  it("does count November's Thursdays", () => {
+    const november = requiredIn("2026-11");
+    expect(november).toContain("2026-11-05");
+    expect(november).toContain("2026-11-26");
+    expect(november).toHaveLength(12);
+
+    // Present every Wednesday and Friday, never a Thursday.
+    const notThursday = november.filter((d) => new Date(`${d}T00:00:00Z`).getUTCDay() !== 4);
+    const person = employee({
+      lastSeenDate: "2026-12-31",
+      attendance: withAttendance(
+        Object.fromEntries(notThursday.map((d) => [d, "PRESENT" as AttendanceState])),
+      ),
+      recordedDates: new Set(november),
+    });
+
+    const result = monthlyCompliance(person, CALENDAR, "2026-11", "2026-12-01");
+    expect(result.verdict).toBe("NO");
+    expect(result.missed).toEqual([
+      "2026-11-05", "2026-11-12", "2026-11-19", "2026-11-26",
+    ]);
+  });
+
+  it("asks the two-week rule for a Thursday only once there is one to ask about", () => {
+    // Standing on Friday 6 November, the fortnight back to 24 October holds
+    // exactly one required Thursday: the 5th.
+    const person = employee({
+      lastSeenDate: "2026-12-31",
+      attendance: withAttendance({
+        "2026-11-04": "PRESENT",
+        "2026-11-05": "ABSENT",
+        "2026-11-06": "PRESENT",
+      }),
+      recordedDates: new Set(["2026-11-04", "2026-11-05", "2026-11-06"]),
+    });
+
+    const result = twoWeekCompliance(person, CALENDAR, "2026-11-07");
+    expect(result.verdict).toBe("NO"); // the Thursday was missed
+    expect(result.missed).toEqual(["2026-11-05"]);
+  });
+
+  it("is NA, not NO, in the fortnight before the first Thursday arrives", () => {
+    // Standing on Thursday 5 November, no required Thursday has finished yet,
+    // so the rule has nothing to judge rather than something to fail.
+    // The fortnight's other required days are all accounted for, so the
+    // Thursday is the only thing left open.
+    const kept = ["2026-10-23", "2026-10-28", "2026-10-30", "2026-11-04"];
+    const person = employee({
+      lastSeenDate: "2026-12-31",
+      attendance: withAttendance(
+        Object.fromEntries(kept.map((d) => [d, "PRESENT" as AttendanceState])),
+      ),
+      recordedDates: new Set(kept),
+    });
+
+    const result = twoWeekCompliance(person, CALENDAR, "2026-11-05");
+    expect(result.verdict).toBe("NA");
+    expect(result.note).toMatch(/no required thursday in the last two weeks/i);
   });
 });
 

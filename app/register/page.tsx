@@ -1,10 +1,11 @@
+import { describeCadence } from "@/lib/calendar/cadence";
 import Link from "next/link";
 import { desc, sql } from "drizzle-orm";
 import { RegisterClient } from "./register-client";
 import { db } from "@/lib/db/client";
 import { listOffices, resolveOffice } from "@/lib/db/offices";
 import { attendance, reasons } from "@/lib/db/schema";
-import { weekStart } from "@/lib/register/week";
+import { addDays, weekStart } from "@/lib/register/week";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Register · Office Attendance" };
@@ -70,8 +71,8 @@ export default async function RegisterPage({
 
       <footer className="mt-8 border-t border-border-soft pt-4 text-xs text-subtle">
         <p>
-          Only Wednesdays and Fridays appear, because they are the only days the policy
-          counts. Public holidays and days the office was closed cannot be ticked.
+          Only {describeCadence(addDays(week, 4))} appear, because they are the only days
+          the policy counts. Public holidays and days the office was closed cannot be ticked.
         </p>
         <p className="mt-1">
           A comment marks the week as an explained absence, which counts against nobody.

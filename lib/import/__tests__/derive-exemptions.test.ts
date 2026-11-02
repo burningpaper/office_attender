@@ -21,11 +21,21 @@ describe("deriveExemption", () => {
     });
   });
 
-  it("does NOT exempt a WFH approval that names a non-required day", () => {
-    // Thursday is not a required day, so this says nothing about Wed/Fri.
-    const result = deriveExemption("Approved to work from home every Thursday");
-    expect(result).toMatchObject({ type: "APPROVED_WFH", exempts: false });
-    expect(result!.reviewReason).toMatch(/not a required day/i);
+  it("does NOT exempt a WFH approval that names particular days", () => {
+    // "every Thursday" is an arrangement for one day of the week. An exemption
+    // here applies to every required day or none, so acting on this would
+    // excuse the Wednesday and Friday it says nothing about. Recorded, flagged,
+    // and left to a person.
+    const derived = deriveExemption("Approved to work from home every Thursday")!;
+    expect(derived.type).toBe("APPROVED_WFH");
+    expect(derived.exempts).toBe(false);
+    expect(derived.reviewReason).toMatch(/names particular days/i);
+    expect(derived.reviewReason).toMatch(/thursday/i);
+  });
+
+  it("does exempt a blanket WFH arrangement", () => {
+    const derived = deriveExemption("Full-time WFH")!;
+    expect(derived.exempts).toBe(true);
   });
 
   it("treats a blanket WFH approval as an exemption, but asks", () => {

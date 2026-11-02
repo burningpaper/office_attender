@@ -5,10 +5,14 @@
  * register tick boxes here instead of editing a workbook that then has to be
  * parsed, reconciled and second-guessed.
  *
- * Only Wednesdays and Fridays appear, because they are the only days the policy
+ * Only the required days appear, because they are the only days the policy
  * counts. The old sheets recorded all five weekdays and the system discarded
- * three of them, which is a lot of typing for nothing.
+ * the rest, which is a lot of typing for nothing. Which days those are comes
+ * from the cadence, so the week grew a Thursday column on 5 November 2026
+ * without this file being touched.
  */
+
+import { requiredWeekdays } from "../calendar/cadence";
 
 /** Monday of the week containing this date. */
 export function weekStart(iso: string): string {
@@ -26,9 +30,17 @@ export function addDays(iso: string, days: number): string {
     .slice(0, 10);
 }
 
-/** The Wednesday and Friday of a week, given its Monday. */
-export function requiredDaysOfWeek(monday: string): { wednesday: string; friday: string } {
-  return { wednesday: addDays(monday, 2), friday: addDays(monday, 4) };
+/**
+ * The required dates of a week, given its Monday, earliest first.
+ *
+ * Each day is tested against the cadence in force on that day rather than on
+ * the Monday, so the week containing 5 November 2026 correctly holds a Thursday
+ * while the week before it does not.
+ */
+export function requiredDaysOfWeek(monday: string): string[] {
+  return [1, 2, 3, 4, 5]
+    .map((offset) => addDays(monday, offset - 1))
+    .filter((date) => requiredWeekdays(date).includes(new Date(`${date}T00:00:00Z`).getUTCDay()));
 }
 
 export function formatWeek(monday: string): string {

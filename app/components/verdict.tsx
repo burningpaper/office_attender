@@ -1,3 +1,4 @@
+import { weekdayInitial } from "@/lib/calendar/cadence";
 import type { ComplianceResult, Verdict } from "@/lib/compliance/types";
 
 const STYLES: Record<Verdict, string> = {
@@ -65,18 +66,22 @@ function shortNote(note: string): string {
   if (/every required day was excused/i.test(note)) return "all excused";
   const months = note.match(/(\d+) complete month/i);
   if (months) return `${months[1]} mo history`;
-  if (/no required (wednesday|friday)/i.test(note)) return "no Wed/Fri";
+  const noDay = note.match(/no required (\w+)(?: or (\w+))? in the last/i);
+  if (noDay) return `no ${[noDay[1], noDay[2]].filter(Boolean).map((d) => d.slice(0, 3)).join("/")}`;
   if (/no required days/i.test(note)) return "none due";
   return note;
 }
 
-/** Long term is two averages, not a total - showing a total invites misreading. */
+/**
+ * Long term is one average per required weekday, not a total - a total invites
+ * exactly the wrong reading, because somebody can clear it and still never
+ * appear on a Friday.
+ */
 export function LongTermCell({
   result,
 }: {
   result: ComplianceResult & {
-    wednesdayAverage: number;
-    fridayAverage: number;
+    perWeekday: { weekday: number; average: number; judged: boolean }[];
     monthsCounted: number;
   };
 }) {
@@ -92,7 +97,12 @@ export function LongTermCell({
   return (
     <div
       className="flex items-baseline gap-1.5"
-      title={`Averaged over ${result.monthsCounted} complete months. Target is 3 of each.`}
+      title={
+        `Averaged over ${result.monthsCounted} complete months. Target is 3 of each. ` +
+        (result.perWeekday.some((d) => !d.judged)
+          ? `Faded: too few months of history to judge yet.`
+          : "")
+      }
     >
       <span
         className={`inline-flex min-w-[2.75rem] justify-center rounded px-1.5 py-0.5 text-xs font-medium ${STYLES[result.verdict]}`}
@@ -100,9 +110,13 @@ export function LongTermCell({
         {LABELS[result.verdict]}
       </span>
       <span className="tabular text-xs text-muted">
-        {result.wednesdayAverage.toFixed(1)}
-        <span className="text-subtle">W</span> {result.fridayAverage.toFixed(1)}
-        <span className="text-subtle">F</span>
+        {result.perWeekday.map((day, i) => (
+          <span key={day.weekday} className={day.judged ? undefined : "opacity-50"}>
+            {i > 0 && " "}
+            {day.average.toFixed(1)}
+            <span className="text-subtle">{weekdayInitial(day.weekday)}</span>
+          </span>
+        ))}
       </span>
     </div>
   );

@@ -79,8 +79,9 @@ function publicStateOf(state: string | undefined): PublicDayState {
 
 export async function loadPublicWeek(db: Db, asOf: string): Promise<PublicWeek> {
   const monday = lastCompletedWeek(asOf);
-  const { wednesday, friday } = requiredDaysOfWeek(monday);
-  const dates = [wednesday, friday];
+  const dates = requiredDaysOfWeek(monday);
+  /** The week's last required day, for judging whether an exemption applied. */
+  const lastRequired = dates[dates.length - 1];
 
   const offices = await db
     .select({ id: s.offices.id, name: s.offices.name })
@@ -113,8 +114,8 @@ export async function loadPublicWeek(db: Db, asOf: string): Promise<PublicWeek> 
     )
       .filter(
         (e) =>
-          (!e.effectiveFrom || e.effectiveFrom <= friday) &&
-          (!e.effectiveTo || e.effectiveTo >= friday),
+          (!e.effectiveFrom || e.effectiveFrom <= lastRequired) &&
+          (!e.effectiveTo || e.effectiveTo >= lastRequired),
       )
       .map((e) => e.employeeId),
   );

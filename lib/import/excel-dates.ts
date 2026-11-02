@@ -41,15 +41,21 @@ export function dateToISODate(d: Date): string {
 }
 
 /** 0 = Sunday ... 6 = Saturday, for an ISO yyyy-mm-dd string. */
+import { isRequiredWeekday as cadenceRequires } from "../calendar/cadence";
+
 export function isoWeekday(iso: string): number {
   return new Date(`${iso}T00:00:00Z`).getUTCDay();
 }
 
-export const WEDNESDAY = 3;
-export const FRIDAY = 5;
+export { WEDNESDAY, FRIDAY, THURSDAY } from "../calendar/cadence";
 
-/** Is this date one the attendance policy cares about? (Wed or Fri.) */
+/**
+ * Is this date one the attendance policy cares about?
+ *
+ * Asked of the cadence, per date, so a column dated a Thursday in an old
+ * workbook is still furniture while one dated after 5 November 2026 is
+ * attendance.
+ */
 export function isRequiredWeekday(iso: string): boolean {
-  const d = isoWeekday(iso);
-  return d === WEDNESDAY || d === FRIDAY;
+  return cadenceRequires(iso, isoWeekday(iso));
 }

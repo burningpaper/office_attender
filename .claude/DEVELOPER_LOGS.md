@@ -828,3 +828,52 @@ The recurring theme of this project, one more time and from a new direction:
 an absence of attendance is not evidence of absence. This is the first version
 of it that no amount of care in the code would have caught, because the missing
 information was in somebody's head.
+
+## 2026-11-02 — Thursday, and Johannesburg
+
+Johannesburg took one command. The office work from September generalised
+properly, so a third site needed no code at all — which is the nicest thing
+that can be said about an abstraction.
+
+Thursday was the real job. Wednesday and Friday had been two integer constants
+copied into six files, which is fine while the answer never changes. The moment
+a rule acquires a start date those constants become a lie: a report on October
+has to go on saying what October's rule said, because somebody who attended
+every required day that month did not retrospectively miss four Thursdays.
+
+So the cadence is now a list of entries, each with the date it took effect, and
+every question about a date is answered by the entry in force on that date. Five
+things then fell out on their own. The monthly verdict is "attended every
+required day", so Thursday joined its denominator without being mentioned. The
+register and the public week iterate the week's required days, so both grew a
+third column. The workbook parser asks the same question of a date column, so a
+Thursday column is furniture in an old file and attendance in a new one.
+
+Two rules named the days out loud and had to be rewritten. Two-week compliance
+asked for "one Wednesday and one Friday"; it now asks once per required
+weekday, which is what it always meant — the rule is about spread, not volume.
+Long-term asked for three of each a month, and that one had a trap in it:
+averaging Thursdays across somebody's August would divide four possible
+attendances by five months and fail the entire company for a rule that did not
+exist in four of them. Each weekday is now averaged over the months it was
+actually required, and is not judged until it has two of them. Thursday starts
+being judged in January.
+
+### What the work turned up
+
+An exemption reading "Approved to work from home every Thursday" sat inactive in
+the database, because under the old rule it excused nothing. Adding Thursday to
+the pattern that decides whether a note names a required day would have promoted
+it to a standing exemption — and exemptions here are all-or-nothing, so it would
+have quietly excused her Wednesdays and Fridays too. The bug was latent all
+along: "WFH Wednesdays" would have done the same before November. Notes naming
+particular days are now recorded and flagged, never acted on, and Lorna Downs
+needs a human decision before Thursday.
+
+The calendar rebuild turned up the other one. 1 and 3 July 2026 are
+OFFICE_CLOSED in this database because a person looked at a Wednesday and a
+Friday with no attendance and said the office had been shut. `buildCalendar` only
+produces WORKING, WEEKEND and PUBLIC_HOLIDAY, so a rebuild that trusted it would
+have made both days required again and handed the whole company two absences on
+days there was nothing to attend. The script previews before it writes, which is
+the only reason that was caught rather than deployed.

@@ -20,8 +20,7 @@ export async function loadWeek(
   officeId: number,
   monday: string,
 ): Promise<RegisterWeek> {
-  const { wednesday, friday } = requiredDaysOfWeek(monday);
-  const dates = [wednesday, friday];
+  const dates = requiredDaysOfWeek(monday);
 
   const calendarRows = await db
     .select({

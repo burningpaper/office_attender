@@ -80,9 +80,25 @@ export type ComplianceResult = {
   note?: string;
 };
 
+/** How one required weekday has gone, averaged over the months it applied to. */
+export type WeekdayAverage = {
+  weekday: number;
+  /** Attendances a month, over `monthsCounted` months. */
+  average: number;
+  /**
+   * Months in which this weekday was a required day at all.
+   *
+   * Its own count, not the overall one. Thursday became required on 5 November
+   * 2026, so averaging it over somebody's August would divide four possible
+   * attendances by four months and fail them for a rule that did not exist.
+   */
+  monthsCounted: number;
+  /** False while this weekday has too little history to average. */
+  judged: boolean;
+};
+
 export type LongTermResult = ComplianceResult & {
-  wednesdayAverage: number;
-  fridayAverage: number;
+  perWeekday: WeekdayAverage[];
   monthsCounted: number;
 };
 

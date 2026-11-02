@@ -28,7 +28,7 @@ export type EmailCategory = "MONTHLY" | "TWO_WEEK" | "LONG_TERM";
 
 export const CATEGORY_LABELS: Record<EmailCategory, string> = {
   MONTHLY: "Not compliant this month",
-  TWO_WEEK: "Missed a Wednesday or a Friday in the last two weeks",
+  TWO_WEEK: "Missed a whole required weekday in the last two weeks",
   LONG_TERM: "Below the long-term average",
 };
 

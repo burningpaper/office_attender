@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { ComplianceTable } from "./components/compliance-table";
 import { SignOut } from "./components/sign-out";
+import { describeCadence } from "@/lib/calendar/cadence";
 import { loadEmployeeRows } from "@/lib/compliance/load";
 import { db } from "@/lib/db/client";
 import { listOffices, resolveOffice } from "@/lib/db/offices";
@@ -103,7 +104,7 @@ export default async function Page({
         </div>
         <p className="mt-1 text-sm text-muted">
           {office ? `${office.name} · ` : ""}
-          {monthLabel} · Wednesdays and Fridays ·{" "}
+          {monthLabel} · {describeCadence(asOf)} ·{" "}
           <span className="tabular">
             {elapsedRequired} required day{elapsedRequired === 1 ? "" : "s"} so far
           </span>

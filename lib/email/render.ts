@@ -12,6 +12,7 @@
  * mistake that gets a system switched off.
  */
 
+import { describeCadence } from "../calendar/cadence";
 import type { Recipient } from "./recipients";
 
 /** 2026-08-05 -> "Wed 5 Aug". */
@@ -57,6 +58,18 @@ export function renderEmail(
 ): RenderedEmail {
   const firstName = recipient.displayName.split(" ")[0];
 
+  /**
+   * Which cadence to describe in the footer.
+   *
+   * Taken from the latest day the email actually mentions, not from today, so
+   * a reminder about October says October's rule. Telling somebody Thursdays
+   * were required in a month when they were not is how a correct system loses
+   * an argument.
+   */
+  const asOfForCadence =
+    [...recipient.attended, ...recipient.missed, ...recipient.excused].sort().pop() ??
+    new Date().toISOString().slice(0, 10);
+
   const rows: [string, string[]][] = [
     ["You attended at the office on", recipient.attended],
     ["You did not attend on", recipient.missed],
@@ -81,7 +94,7 @@ export function renderEmail(
   <table style="border-collapse:collapse;font-size:14px;margin:20px 0 0;border-top:1px solid #e4e4e1;padding-top:16px;width:100%;">
     ${summaryRows}
   </table>
-  <p style="margin:20px 0 0;font-size:12px;color:#94948c;">Wednesdays and Fridays are the required days. Public holidays and days the office was closed are not counted.</p>
+  <p style="margin:20px 0 0;font-size:12px;color:#94948c;">${describeCadence(asOfForCadence)} are the required days. Public holidays and days the office was closed are not counted.</p>
 </div>`;
 
   const textLines = [

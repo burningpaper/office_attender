@@ -16,13 +16,13 @@ const COLUMNS: { key: SortKey; label: string; hint: string; className: string }[
   {
     key: "twoWeek",
     label: "Two week",
-    hint: "At least one Wednesday and one Friday in the last 14 days",
+    hint: "At least one of each required weekday in the last 14 days",
     className: "text-left",
   },
   {
     key: "longTerm",
     label: "Long term",
-    hint: "Averaging 3 Wednesdays and 3 Fridays a month since joining",
+    hint: "Averaging 3 of each required weekday a month since joining",
     className: "text-left",
   },
   {

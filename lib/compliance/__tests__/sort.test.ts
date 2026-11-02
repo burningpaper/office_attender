@@ -26,7 +26,7 @@ function row(
     onRosterThisMonth: true,
     monthly: result("YES"),
     twoWeek: result("YES"),
-    longTerm: { ...result("YES"), wednesdayAverage: 3, fridayAverage: 3, monthsCounted: 3 },
+    longTerm: { ...result("YES"), perWeekday: [{ weekday: 3, average: 3, monthsCounted: 3, judged: true }, { weekday: 5, average: 3, monthsCounted: 3, judged: true }], monthsCounted: 3 },
     lastAttended: "2026-08-28",
     recent: { basis: "LAST_FEW_DAYS", since: null, result: result("NA") },
     improving: false,
@@ -74,8 +74,8 @@ describe("sorting by verdict", () => {
   it("sorts each of the three verdict columns", () => {
     for (const key of ["monthly", "twoWeek", "longTerm"] as const) {
       const rows = [
-        row("Good", { [key]: { ...result("YES"), wednesdayAverage: 3, fridayAverage: 3, monthsCounted: 3 } } as Partial<EmployeeRowWithDays>),
-        row("Bad", { [key]: { ...result("NO"), wednesdayAverage: 0, fridayAverage: 0, monthsCounted: 3 } } as Partial<EmployeeRowWithDays>),
+        row("Good", { [key]: { ...result("YES"), perWeekday: [{ weekday: 3, average: 3, monthsCounted: 3, judged: true }, { weekday: 5, average: 3, monthsCounted: 3, judged: true }], monthsCounted: 3 } } as Partial<EmployeeRowWithDays>),
+        row("Bad", { [key]: { ...result("NO"), perWeekday: [{ weekday: 3, average: 0, monthsCounted: 3, judged: true }, { weekday: 5, average: 0, monthsCounted: 3, judged: true }], monthsCounted: 3 } } as Partial<EmployeeRowWithDays>),
       ];
       expect(sortRows(rows, key, "asc")[0].displayName, key).toBe("Bad");
     }

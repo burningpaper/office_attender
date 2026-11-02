@@ -452,3 +452,58 @@ Verified against the live database rather than a fixture: the rendered HTML
 contains no surname of anybody with a unique first name, no absence comment, no
 exemption note and no email address. A wrong token 404s, a correct one renders,
 and an unset PUBLIC_SHARE_TOKEN 404s for everybody.
+
+## Stage 13: Thursday, and a third office
+Goal: Required days become Wednesday, Thursday and Friday from 5 November 2026,
+without rewriting the past. Johannesburg joins Cape Town and Durban.
+
+The cadence has been two hardcoded constants in six files. It becomes one
+policy with effective dates, because "from November" means October has to keep
+reading as Wed/Fri for ever — a report on last month must say what last month's
+rule said, not what today's does.
+
+- `lib/calendar/cadence.ts` — the single answer to "which weekdays are required
+  on this date?". An ordered list of cadences, each with a `from` date; the last
+  one that has started wins. Also `describeCadence` for the four places that
+  print "Wednesdays and Fridays" at a reader.
+- `lib/calendar/build-calendar.ts` — asks the policy instead of testing two
+  constants. `calendar_days.is_required_day` is then rebuilt from 5 November on.
+- `lib/compliance/rules.ts`:
+  - `twoWeekCompliance` — "one of each required weekday", derived rather than
+    "one Wednesday and one Friday". Thursday is a full peer, per the decision.
+  - `longTermCompliance` — ≥3 of each required weekday a month, so 9 a month
+    from November rather than 6. `wednesdayAverage`/`fridayAverage` become a
+    per-weekday map; `verdict.tsx` and `scripts/report.ts` read it.
+  - the recent-form window — four days was "two ordinary weeks". Two weeks is
+    now six days, so the constant becomes two weeks expressed in the policy.
+- `lib/register/week.ts` — `requiredDaysOfWeek` returns the week's required
+  dates rather than `{ wednesday, friday }`. The register and the public week
+  both iterate it, so both grow a third column on their own.
+- `lib/import/excel-dates.ts`, `lib/import/derive-exemptions.ts` — a workbook
+  column dated a Thursday is now attendance, and a note saying "WFH Thursdays"
+  now names a required day, where before it was irrelevant.
+- `npm run calendar:rebuild` — recomputes `is_required_day` from the policy.
+  Reports what it would change before changing it.
+
+Success Criteria:
+- A date in October is required iff it is a working Wed or Fri; a date from
+  5 November iff it is a working Wed, Thu or Fri. Tested either side of the
+  boundary, and on the boundary itself.
+- October's verdicts are byte-identical before and after the change. This is the
+  one that matters: the past must not move.
+- A public holiday falling on a Thursday is not a required day.
+- The register and the public week show three columns from November and two
+  before it, in the same week-by-week view.
+- Johannesburg exists and is selectable, with no staff until a list is uploaded.
+Status: **Complete** — 355 tests.
+
+Verified on live data: October is judged on weekdays {3,5} and nothing else,
+eleven people non-compliant, exactly as before. The week of 2 November holds
+three required days and the week of 26 October two.
+
+The rebuild found something the plan had not anticipated: 1 and 3 July 2026 are
+OFFICE_CLOSED in this database, set by a person confronting a Wednesday and a
+Friday with no attendance on them. `buildCalendar` cannot know that, so a
+rebuild which trusted it would have made both days required and handed the whole
+company two absences on days the office was shut. The script now leaves
+hand-closed days alone and says which ones.

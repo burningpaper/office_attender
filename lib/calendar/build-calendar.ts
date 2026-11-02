@@ -2,9 +2,12 @@
  * Turns a date range into the calendar rows compliance is measured against.
  *
  * The denominator for every compliance question comes from here, so this is the
- * single place that decides whether a given Wednesday or Friday counts.
+ * single place that decides whether a given day counts. Which weekdays are
+ * required is asked of the cadence, per date, because the answer changed on
+ * 5 November 2026 and the rows either side of that have to disagree.
  */
 
+import { isRequiredWeekday } from "./cadence";
 import { southAfricanHolidays } from "./holidays";
 
 export type DayType = "WORKING" | "WEEKEND" | "PUBLIC_HOLIDAY" | "OFFICE_CLOSED";
@@ -12,13 +15,10 @@ export type DayType = "WORKING" | "WEEKEND" | "PUBLIC_HOLIDAY" | "OFFICE_CLOSED"
 export type CalendarDay = {
   date: string;
   dayType: DayType;
-  /** Wed or Friday AND actually a working day. The compliance denominator. */
+  /** A required weekday AND actually a working day. The denominator. */
   isRequiredDay: boolean;
   label: string | null;
 };
-
-const WEDNESDAY = 3;
-const FRIDAY = 5;
 
 /**
  * Build calendar rows for [startYear, endYear] inclusive.
@@ -48,7 +48,7 @@ export function buildCalendar(startYear: number, endYear: number): CalendarDay[]
       days.push({
         date,
         dayType,
-        isRequiredDay: dayType === "WORKING" && (dow === WEDNESDAY || dow === FRIDAY),
+        isRequiredDay: dayType === "WORKING" && isRequiredWeekday(date, dow),
         label: holidayName ?? null,
       });
 

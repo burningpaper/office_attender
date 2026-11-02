@@ -8,6 +8,7 @@ import { config } from "dotenv";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "../lib/db/schema";
+import { weekdayInitial } from "../lib/calendar/cadence";
 import { loadEmployeeRows } from "../lib/compliance/load";
 import { VERDICT_ORDER } from "../lib/compliance/rules";
 import { filterRows } from "../lib/compliance/sort";
@@ -26,16 +27,21 @@ function cell(r: { verdict: string; attended: number; required: number; excused:
 }
 
 /**
- * Long term is two separate averages, not a total, so showing "37/36" invites
- * exactly the wrong reading - someone can clear the total and still fail on
- * Fridays. Show the two numbers the rule actually tests.
+ * Long term is one average per required weekday, not a total, so showing
+ * "37/36" invites exactly the wrong reading - someone can clear the total and
+ * still fail on Fridays. Show the numbers the rule actually tests.
  */
 function longTermCell(r: {
-  verdict: string; wednesdayAverage: number; fridayAverage: number; monthsCounted: number;
+  verdict: string;
+  perWeekday: { weekday: number; average: number }[];
+  monthsCounted: number;
 }) {
   if (r.verdict === "EXEMPT") return "EXEMPT";
   if (r.verdict === "NA") return `— (${r.monthsCounted}mo)`;
-  return `${r.verdict} ${r.wednesdayAverage.toFixed(1)}W/${r.fridayAverage.toFixed(1)}F`;
+  const averages = r.perWeekday
+    .map((d) => `${d.average.toFixed(1)}${weekdayInitial(d.weekday)}`)
+    .join("/");
+  return `${r.verdict} ${averages}`;
 }
 
 async function main() {

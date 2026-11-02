@@ -27,7 +27,7 @@ function row(name: string, overrides: Partial<EmployeeRowWithDays> = {}): Employ
     onRosterThisMonth: true,
     monthly: result("NO"),
     twoWeek: result("NO"),
-    longTerm: { ...result("NO"), wednesdayAverage: 0, fridayAverage: 0, monthsCounted: 3 },
+    longTerm: { ...result("NO"), perWeekday: [{ weekday: 3, average: 0, monthsCounted: 3, judged: true }, { weekday: 5, average: 0, monthsCounted: 3, judged: true }], monthsCounted: 3 },
     lastAttended: null,
     recent: { basis: "LAST_FEW_DAYS", since: null, result: result("NA") },
     improving: false,
@@ -82,7 +82,7 @@ describe("who never gets a message", () => {
     const person = row("Split", {
       monthly: result("YES"),
       twoWeek: result("NO"),
-      longTerm: { ...result("YES"), wednesdayAverage: 3, fridayAverage: 3, monthsCounted: 3 },
+      longTerm: { ...result("YES"), perWeekday: [{ weekday: 3, average: 3, monthsCounted: 3, judged: true }, { weekday: 5, average: 3, monthsCounted: 3, judged: true }], monthsCounted: 3 },
     });
     const map = emails([[5, "split@x.com"]]);
     expect(buildRecipients([person], "MONTHLY", map).recipients).toHaveLength(0);

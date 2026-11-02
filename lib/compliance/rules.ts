@@ -23,10 +23,15 @@ import type {
   Exemption,
   LongTermResult,
   RecentForm,
+  WeekdayAverage,
 } from "./types";
 
-const WEDNESDAY = 3;
-const FRIDAY = 5;
+import {
+  isRequiredWeekday,
+  requiredDaysPerWeek,
+  requiredWeekdays,
+  weekdayName,
+} from "../calendar/cadence";
 
 export function weekdayOf(iso: string): number {
   return new Date(`${iso}T00:00:00Z`).getUTCDay();
@@ -228,11 +233,17 @@ export function monthlyCompliance(
 }
 
 /**
- * Two-week compliance: at least one Wednesday and at least one Friday.
+ * Two-week compliance: at least one of each required weekday.
  *
- * Both halves must be answerable. If the fortnight contains no required
- * Wednesday - a public holiday, or the person joined on Thursday - then the
- * question has no answer, and NA is the honest one.
+ * The point of the rule is spread, not volume - somebody who only ever appears
+ * on the same day of the week is not really coming in. So it asks the question
+ * once per required weekday rather than counting days, and every part of it
+ * must be answerable: if the fortnight holds no required Thursday, because of a
+ * public holiday or because the person joined on a Friday, then the question
+ * has no answer and NA is the honest one.
+ *
+ * The weekdays come from the cadence rather than two constants, so the rule
+ * grew a third clause on 5 November 2026 without being rewritten.
  */
 export function twoWeekCompliance(
   employee: EmployeeInput,
@@ -251,68 +262,72 @@ export function twoWeekCompliance(
     if (state === undefined) return employee.recordedDates?.has(date) ?? false;
     return state !== "ABSENT_EXPLAINED" && state !== "NOT_EMPLOYED";
   };
-  const weds = required.filter((d) => weekdayOf(d) === WEDNESDAY).filter(judgeable);
-  const fris = required.filter((d) => weekdayOf(d) === FRIDAY).filter(judgeable);
 
-  const excused = required.filter(
+  const byWeekday = requiredWeekdays(asOf).map((weekday) => ({
+    weekday,
+    dates: required.filter((d) => weekdayOf(d) === weekday).filter(judgeable),
+  }));
+
+  const excusedDates = required.filter(
     (d) => employee.attendance.get(d) === "ABSENT_EXPLAINED",
-  ).length;
+  );
   const unrecorded = required.filter(
     (d) => employee.attendance.get(d) === undefined && !employee.recordedDates?.has(d),
   );
 
-  if (weds.length === 0 || fris.length === 0) {
+  const missing = byWeekday.filter((group) => group.dates.length === 0);
+  if (missing.length > 0) {
+    const names = missing.map((group) => weekdayName(group.weekday));
     return {
       verdict: "NA",
       attended: 0,
       required: 0,
-      excused,
+      excused: excusedDates.length,
       attendedDates: [],
-      excusedDates: required.filter(
-        (d) => employee.attendance.get(d) === "ABSENT_EXPLAINED",
-      ),
+      excusedDates,
       missed: [],
       unrecorded,
       note:
         unrecorded.length > 0
           ? `Nothing recorded yet for ${unrecorded.length} of the last fortnight's required days.`
-          :
-        weds.length === 0 && fris.length === 0
-          ? "No required days in the last two weeks."
-          : weds.length === 0
-            ? "No required Wednesday in the last two weeks."
-            : "No required Friday in the last two weeks.",
+          : missing.length === byWeekday.length
+            ? "No required days in the last two weeks."
+            : `No required ${names.join(" or ")} in the last two weeks.`,
     };
   }
 
   const present = (date: string) => employee.attendance.get(date) === "PRESENT";
-  const anyWed = weds.some(present);
-  const anyFri = fris.some(present);
+  const judged = byWeekday.flatMap((group) => group.dates);
 
   return {
-    verdict: anyWed && anyFri ? "YES" : "NO",
-    attended: weds.filter(present).length + fris.filter(present).length,
-    required: weds.length + fris.length,
-    excused,
-    attendedDates: [...weds, ...fris].filter(present).sort(),
-    excusedDates: required
-      .filter((d) => employee.attendance.get(d) === "ABSENT_EXPLAINED")
-      .sort(),
-    missed: [...weds, ...fris].filter((d) => !present(d)).sort(),
+    verdict: byWeekday.every((group) => group.dates.some(present)) ? "YES" : "NO",
+    attended: judged.filter(present).length,
+    required: judged.length,
+    excused: excusedDates.length,
+    attendedDates: judged.filter(present).sort(),
+    excusedDates: [...excusedDates].sort(),
+    missed: judged.filter((d) => !present(d)).sort(),
     unrecorded,
   };
 }
 
 /**
- * Long-term compliance: an average of three Wednesdays and three Fridays a
- * month, over the complete months this person has actually been employed.
+ * Long-term compliance: an average of three of each required weekday a month,
+ * over the complete months this person has actually been employed.
  *
  * Dividing by months employed rather than months elapsed is what stops someone
  * who joined in August looking like a persistent offender. Fewer than two
  * complete months is not enough to average anything, so it reports NA.
  *
- * Worth knowing: in a month where a public holiday takes out a Wednesday, three
- * is a demanding target. December 2026 has only seven required days at all.
+ * Each weekday is averaged over the months it was actually required, and is
+ * not judged at all until it has enough of them. Thursday became required on
+ * 5 November 2026; dividing November's Thursdays by somebody's five months of
+ * history would have failed the entire company for a rule that did not exist
+ * in four of them, and judging it on its single first month would have been
+ * nearly as arbitrary.
+ *
+ * Worth knowing: in a month where a public holiday takes out a Wednesday,
+ * three is a demanding target - December 2026 keeps only four of them.
  */
 export function longTermCompliance(
   employee: EmployeeInput,
@@ -325,7 +340,7 @@ export function longTermCompliance(
 
   const exemption = activeExemption(employee, asOf);
   if (exemption) {
-    return { ...exemptResult(exemption), wednesdayAverage: 0, fridayAverage: 0, monthsCounted: 0 };
+    return { ...exemptResult(exemption), perWeekday: [], monthsCounted: 0 };
   }
 
   const months = completeMonthsFor(employee, calendar, asOf);
@@ -340,14 +355,14 @@ export function longTermCompliance(
       excusedDates: [],
       unrecorded: [],
       note: `Only ${months.length} complete month${months.length === 1 ? "" : "s"} of history.`,
-      wednesdayAverage: 0,
-      fridayAverage: 0,
+      perWeekday: [],
       monthsCounted: months.length,
     };
   }
 
-  let wednesdays = 0;
-  let fridays = 0;
+  /** Attendances per weekday, and the months each weekday was required in. */
+  const attendedBy = new Map<number, number>();
+  const monthsBy = new Map<number, number>();
   let attended = 0;
 
   for (const month of months) {
@@ -355,28 +370,63 @@ export function longTermCompliance(
       start: `${month}-01`,
       end: lastDayOfMonth(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1),
     };
-    for (const date of requiredDaysFor(employee, calendar, window, asOf)) {
+    const dates = requiredDaysFor(employee, calendar, window, asOf);
+
+    /**
+     * Which weekdays this month expected, read off the month's own required
+     * days rather than the cadence. A month the person joined halfway through
+     * cannot be held to a weekday they were never there for.
+     */
+    for (const weekday of new Set(dates.map(weekdayOf))) {
+      monthsBy.set(weekday, (monthsBy.get(weekday) ?? 0) + 1);
+    }
+
+    for (const date of dates) {
       if (employee.attendance.get(date) !== "PRESENT") continue;
       attended++;
-      if (weekdayOf(date) === WEDNESDAY) wednesdays++;
-      else if (weekdayOf(date) === FRIDAY) fridays++;
+      const weekday = weekdayOf(date);
+      attendedBy.set(weekday, (attendedBy.get(weekday) ?? 0) + 1);
     }
   }
 
-  const wednesdayAverage = wednesdays / months.length;
-  const fridayAverage = fridays / months.length;
+  const perWeekday: WeekdayAverage[] = requiredWeekdays(asOf).map((weekday) => {
+    const monthsCounted = monthsBy.get(weekday) ?? 0;
+    return {
+      weekday,
+      monthsCounted,
+      average: monthsCounted > 0 ? (attendedBy.get(weekday) ?? 0) / monthsCounted : 0,
+      judged: monthsCounted >= minimumMonths,
+    };
+  });
+
+  const judged = perWeekday.filter((day) => day.judged);
+
+  if (judged.length === 0) {
+    return {
+      verdict: "NA",
+      attended,
+      required: 0,
+      excused: 0,
+      missed: [],
+      attendedDates: [],
+      excusedDates: [],
+      unrecorded: [],
+      note: "No required weekday has enough months of history to average.",
+      perWeekday,
+      monthsCounted: months.length,
+    };
+  }
 
   return {
-    verdict: wednesdayAverage >= target && fridayAverage >= target ? "YES" : "NO",
+    verdict: judged.every((day) => day.average >= target) ? "YES" : "NO",
     attended,
-    required: months.length * target * 2,
+    required: judged.reduce((total, day) => total + day.monthsCounted * target, 0),
     excused: 0,
     attendedDates: [],
     excusedDates: [],
     missed: [],
     unrecorded: [],
-    wednesdayAverage,
-    fridayAverage,
+    perWeekday,
     monthsCounted: months.length,
   };
 }
@@ -443,11 +493,19 @@ export function completeMonthsFor(
 /**
  * How many required days to look back over when nobody has been reminded.
  *
- * Four is two ordinary weeks of Wednesdays and Fridays. Counting days rather
+ * Two ordinary weeks' worth of required days. Counting days rather
  * than a fortnight of calendar keeps the window meaningful through a public
  * holiday, which would otherwise leave only two or three days to judge on.
  */
-const RECENT_REQUIRED_DAYS = 4;
+/**
+ * The fallback window, in weeks rather than days.
+ *
+ * It used to be the constant 4, which was "two ordinary weeks" when a week
+ * held two required days. Thursday made that a week and a third, so the figure
+ * is now derived - six days from November, four before it - and the window
+ * stays two weeks whatever the cadence does next.
+ */
+const RECENT_WEEKS = 2;
 
 /** Never reach further back than this, however sparse the calendar. */
 const RECENT_MAX_LOOKBACK_DAYS = 42;
@@ -484,7 +542,7 @@ export function recentForm(
     return { basis: "SINCE_REMINDER", since: reminder, result: score(employee, since) };
   }
 
-  const last = elapsed.slice(-RECENT_REQUIRED_DAYS);
+  const last = elapsed.slice(-(RECENT_WEEKS * requiredDaysPerWeek(asOf)));
   return {
     basis: "LAST_FEW_DAYS",
     since: last.length > 0 ? addDays(last[0], -1) : null,
