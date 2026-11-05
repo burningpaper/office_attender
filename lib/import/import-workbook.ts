@@ -402,6 +402,82 @@ export async function importWorkbook(
       report.attendance.removed += stale;
     }
 
+    /**
+     * What a staff roster would do to the workforce.
+     *
+     * Everything above previews attendance, and a roster-only file has none -
+     * so without this a 248-person roster previews as "0 names → 0 people",
+     * which is indistinguishable from a file the parser could not read. The
+     * preview existed and said nothing, which is worse than not having one.
+     *
+     * Two numbers matter, and the second matters far more: how many people
+     * this would create, and how many it would retire. A roster is
+     * authoritative about who works somewhere, so one imported against the
+     * wrong office marks that office's entire staff as departed. That has to
+     * be visible before anybody types the command without --dry-run.
+     */
+    if ((options.updateEmploymentStatus ?? true) && parsed.roster.length > 0) {
+      const rosterIdentities = resolveIdentities(
+        parsed.roster.map((person) => ({
+          sheetName: person.sheetName,
+          rowNumber: person.rowNumber,
+          firstName: person.firstName,
+          lastName: person.lastName,
+          rawName: person.rawName,
+          standingNote: null,
+          email: person.email,
+        })),
+        knownEmployees,
+        knownAliases,
+      );
+
+      report.people.addedFromRoster = rosterIdentities
+        .filter((identity) => identity.employeeId === undefined)
+        .map((identity) => identity.displayName);
+
+      /**
+       * Employed if on the roster OR on the newest attendance sheet - the same
+       * rule the commit uses, repeated here rather than shared because the two
+       * read from different parses. If they ever drift, the preview lies.
+       */
+      const employed = new Set(
+        rosterIdentities
+          .map((identity) => identity.employeeId)
+          .filter((id): id is number => id !== undefined),
+      );
+      const newestForRoster = [...parsed.sheets]
+        .filter((sheet) => sheet.isDataSheet && sheet.dateRange)
+        .sort((a, b) => a.dateRange!.end.localeCompare(b.dateRange!.end))
+        .pop();
+      if (newestForRoster) {
+        for (const row of parsed.employees) {
+          if (row.sheetName !== newestForRoster.sheetName) continue;
+          const id = knownIdByRawName.get(row.rawName);
+          if (id !== undefined) employed.add(id);
+        }
+      }
+
+      const everyone = await db
+        .select({
+          id: s.employees.id,
+          displayName: s.employees.displayName,
+          status: s.employees.status,
+          lastSeenDate: s.employees.lastSeenDate,
+        })
+        .from(s.employees)
+        .where(eq(s.employees.officeId, officeId));
+
+      report.people.departed = everyone
+        .filter((person) => !employed.has(person.id) && person.status !== "DEPARTED")
+        .map((person) => ({
+          displayName: person.displayName,
+          lastSeenDate: person.lastSeenDate,
+        }));
+      report.people.returned = everyone
+        .filter((person) => employed.has(person.id) && person.status === "DEPARTED")
+        .map((person) => person.displayName);
+    }
+
     return report;
   }
 

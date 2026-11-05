@@ -27,7 +27,6 @@ import type {
 } from "./types";
 
 import {
-  isRequiredWeekday,
   requiredDaysPerWeek,
   requiredWeekdays,
   weekdayName,

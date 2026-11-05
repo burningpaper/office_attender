@@ -877,3 +877,84 @@ produces WORKING, WEEKEND and PUBLIC_HOLIDAY, so a rebuild that trusted it would
 have made both days required again and handed the whole company two absences on
 days there was nothing to attend. The script previews before it writes, which is
 the only reason that was caught rather than deployed.
+
+## 2026-11-05 — Johannesburg gets its 248 people, and the preview learns to speak
+
+Johannesburg existed as an empty office from Monday. Today it got a staff list,
+and the staff list was not a spreadsheet this system had ever seen: an HR export
+of 248 rows with job titles, a department column, a location column reading
+"Johannesburg" 248 times, and not a single date.
+
+The parser needed nothing. `parseRosterSheet` recognises a roster by shape
+rather than by tab name — first-name, last-name and email headers, no date
+columns — so "GenEntity - First Name" matched a regex written months earlier for
+a differently-prefixed file, and all 248 people came through with their email
+addresses. The `Sheet3` tab, holding a filter remnant that reads
+"2026/10/31 (8 of 12)", was skipped as not-a-month. Recognising by shape earned
+its keep here: a tab named `Table1` would have been invisible to any rule that
+went looking for the word "staff".
+
+### What did need fixing, and why it was urgent
+
+`importWorkbook` scopes everything it touches to one office, and when not told
+which, it falls back to the lowest id. That is Cape Town. The CLI had no way to
+pass an office at all.
+
+So `npm run db:import -- "johannesburg staff list.xlsx"` would have created 248
+Johannesburg people inside Cape Town, and then marked all 68 Cape Town employees
+as departed — because a roster is treated as authoritative about who works
+somewhere, and no Cape Town name appears on a Johannesburg roster. The function's
+own comment names this exact scenario. The command line simply never grew the
+flag to honour it.
+
+`--office` is now required whenever more than one office exists, and the command
+prints which office it is about to write to, and how many people are already
+there, before it does anything.
+
+### The preview that said nothing
+
+Worse, and more interesting: the dry run returned before it ever looked at the
+roster. Previewing this file printed
+
+    identities   0 names → 0 people
+    attendance   0 new, 0 changed, 0 unchanged
+
+which is exactly what an unreadable file looks like. The one safety net against
+the disaster above was in place, was run, and was silent — which is worse than
+not having one, because somebody checking their work would have concluded the
+file was broken and gone looking in the wrong place.
+
+The preview now resolves roster identities and reports both numbers that matter:
+how many people it would create, and — far more important — how many it would
+retire. Dry-running this same file against Cape Town now answers
+`Marked as departed (66)` and lists every name. Departures get their own heading
+and no truncation, because a roster missing people reads as a roster of leavers,
+and that is the one outcome here nobody wants to find out about a month later.
+
+The departure rule is duplicated between the preview and the commit rather than
+shared, because the two read from different parses. The comment says so. If they
+drift, the preview lies, which is the failure this whole section exists to
+prevent.
+
+### What the data turned up
+
+Five people are on the Johannesburg roster and already had a record elsewhere,
+all five matched by exact name:
+
+    Lonwabo Mbadlanyana   CT: DEPARTED   last present  9 Jun
+    Nadine Pillay         CT: DEPARTED   last present 13 Mar
+    Rolanda Olsen         CT: ACTIVE     never present
+    Sibulele Mguga        CT: ACTIVE     last present 16 Oct
+    Olwethu Bandezi       DBN: ACTIVE    last present  2 Oct
+
+The two already departed are settled: transfers, old record closed, nothing to
+do. The three still active now exist twice over, and identity resolution is
+deliberately office-scoped, so nothing links the pair. Rolanda Olsen has never
+attended Cape Town at all and was probably always Johannesburg. The other two
+were physically in their old offices in October, which a location column cannot
+overrule.
+
+Left alone, on purpose. Departing Sibulele Mguga from Cape Town on the strength
+of an HR export would erase somebody who was genuinely in that office three
+weeks ago — the same mistake as the placeholder zeros and the Foundation Day
+absences, arriving by a new route. Flagged for a human instead.
