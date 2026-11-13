@@ -1039,3 +1039,28 @@ so the average was truthfully zero and read as "never comes in on a Thursday" �
 the single conclusion the number cannot support. The verdict already ignored
 these; the column now prints `–T` and stops contradicting it. The web table
 already faded them.
+
+## 2026-11-13 — one number instead of two on the chase list
+
+The recipient row on the email screen read `3 attended · 2 missed · 2 excused`,
+and the first question anybody asked of it was whether the excused count was
+part of the missed one or on top of it. They are disjoint — four days away, two
+of them explained — but nothing in the line said so, and the reader had to
+reconstruct the arithmetic before deciding whether to chase somebody.
+
+The excused days have no bearing on that decision. They are not counted against
+anybody, and they are already out of the verdict's denominator, so showing them
+on the screen where you pick recipients only added a step. The row now reads
+`3 attended · 2 unexcused`, with the precise definition on hover.
+
+The Preview below it was deliberately left alone. It is labelled "as they will
+see it" and the email genuinely does tell the person about their excused days,
+so hiding them there would have made the preview misrepresent what was being
+sent.
+
+Verified against live data rather than by eye: every November recipient with
+both kinds of day has zero overlap between the two lists, confirming the
+arithmetic the old label obscured. The row itself could not be render-tested —
+the list is fetched client-side into state, so it never appears in the server
+HTML, and this project has no component-test harness. Worth adding one if more
+UI work lands.

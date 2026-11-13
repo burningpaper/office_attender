@@ -354,9 +354,30 @@ function Recipients({ list, deselected, onToggle }: {
                 </span>
               )}
               <span className="text-xs text-subtle">{r.email}</span>
+              {/*
+                Attended and unexcused, and deliberately nothing else.
+
+                This line used to read "3 attended · 2 missed · 2 excused",
+                which invited exactly one question: is the excused count part of
+                the missed one, or on top of it? They are disjoint - four days
+                away, two of them explained - but a reader had no way to know
+                that from the line, and on the screen where you decide whom to
+                chase, a number you have to stop and interpret is worse than no
+                number. The excused days are not counted against anybody and
+                they are already out of the verdict's denominator, so they have
+                no bearing on the decision being made here.
+
+                The person's own email still tells them about them, and the
+                Preview below still shows that faithfully.
+              */}
               <span className="tabular ml-auto text-xs text-muted">
-                {r.attended.length} attended · <span className="text-no">{r.missed.length} missed</span>
-                {r.excused.length > 0 && <span className="text-subtle"> · {r.excused.length} excused</span>}
+                {r.attended.length} attended ·{" "}
+                <span
+                  className="text-no"
+                  title="Required days missed with no explanation. Excused days are not counted here, nor against them in the verdict."
+                >
+                  {r.missed.length} unexcused
+                </span>
                 {r.improving && r.recentNote && (
                   <span className="block text-[0.65rem] text-yes">{r.recentNote}</span>
                 )}
