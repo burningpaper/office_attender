@@ -26,3 +26,15 @@ A webpage will display a list of all employees. Against each will be the followi
 - Last Date Attended (the last date on which this employee came into the office)
 
 I need the ability to sort this table by any of these columns. I also require the ability to filter the page by month (it will default to the current month)
+
+# Emailer
+
+This will be a page that will enable me to bulk send mails to non-compliant people.
+
+I would be able to select the category of non-complier (this week, 2 weeks or long-term) and that will build an email list. I will upload email addresses to the database so an additional column will be required for this.
+
+The system will let me enter a subject and text to a message and will attach for each individual:
+You attended at the office on: [dates]
+You did not attend on: [dates]
+
+The system will send using my email address via an n8n workflow where I have my credentials authenticated against the MS Graph. You will need to build this n8n flow using the MCP server.

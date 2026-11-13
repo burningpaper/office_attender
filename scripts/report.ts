@@ -33,13 +33,21 @@ function cell(r: { verdict: string; attended: number; required: number; excused:
  */
 function longTermCell(r: {
   verdict: string;
-  perWeekday: { weekday: number; average: number }[];
+  perWeekday: { weekday: number; average: number; judged: boolean }[];
   monthsCounted: number;
 }) {
   if (r.verdict === "EXEMPT") return "EXEMPT";
   if (r.verdict === "NA") return `— (${r.monthsCounted}mo)`;
+
+  /**
+   * A weekday with too little history prints a dash, not its average. Thursday
+   * became required on 5 November and has no complete month behind it, so every
+   * average was truthfully 0.0 and read as "never comes in on a Thursday" - the
+   * one conclusion the number cannot support. The verdict already ignores these;
+   * the column should not have contradicted it. The web table fades them.
+   */
   const averages = r.perWeekday
-    .map((d) => `${d.average.toFixed(1)}${weekdayInitial(d.weekday)}`)
+    .map((d) => `${d.judged ? d.average.toFixed(1) : "–"}${weekdayInitial(d.weekday)}`)
     .join("/");
   return `${r.verdict} ${averages}`;
 }

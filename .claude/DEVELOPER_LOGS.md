@@ -958,3 +958,84 @@ Left alone, on purpose. Departing Sibulele Mguga from Cape Town on the strength
 of an HR export would erase somebody who was genuinely in that office three
 weeks ago — the same mistake as the placeholder zeros and the Foundation Day
 absences, arriving by a new route. Flagged for a human instead.
+
+## 2026-11-13 — the column that stopped meaning anything
+
+Reported symptom: people ticked in on the register for November, and the report
+showing no attendance for them. October too.
+
+It was not an attendance bug. Those people were being reported as `0/0`, verdict
+NA — the report had decided they had **no required days at all** that month, so
+there was nothing to judge and nothing to count.
+
+### The cause
+
+`last_seen_date`. It was invented when a month arrived as a spreadsheet, where
+it meant "the last monthly sheet this person's name appeared on". In that world
+it honestly doubled as the day they left: a name stopped being printed because
+its owner had gone, so reading it as the end of employment was correct.
+
+Then the register replaced the spreadsheet, and nothing advances the column any
+more. For anybody still employed it now records the date of the last import and
+nothing else whatsoever. Cape Town's final workbook covered September, so all 61
+of its people carried `last_seen_date = 2026-09-30` into October and November,
+and `requiredDaysFor` filtered every required day in both months out from under
+them.
+
+The giveaway was in the shape of the damage rather than the code:
+
+    office   register   report
+    CT             98        3
+    DBN            68       68
+
+Durban was perfect. Durban and Johannesburg were created by paths that never set
+the column, so they had no upper bound to trip over. And the three Cape Town
+people the report got right were precisely those whose `last_seen_date` was null.
+
+### The fix
+
+The bound now applies only to somebody who has actually left. Departure is what
+`status` records, and it already reached the rules as `hasLeft`. One
+`employmentEnd` helper, used by all three places that read the column, so they
+cannot drift apart.
+
+For a leaver the column is still stale, so it is not trusted alone there either.
+Matthew Rudd was marked departed on 11 November having been in the office on the
+5th and 6th — his own register entries for those days read "last day - needs to
+be removed" — while his `last_seen_date` said 30 September, so the report
+dropped two days he actually worked. The window now extends to the last day a
+leaver was recorded PRESENT. Only PRESENT: a stray absence dated after somebody
+left would otherwise reopen the window and mark them non-compliant for a job
+they no longer held.
+
+Register and report now agree exactly, 166 of 166 in November and 438 of 438 in
+October, with zero disagreements per person.
+
+### Why 359 tests missed it
+
+The shared `employee()` fixture in `rules.test.ts` defaults `lastSeenDate` to
+"2026-09-30", and every test that used it judged a month at or before September.
+The suite had never once asked what happens to an active employee in the month
+*after* their last import. Not one existing test broke when the rule changed,
+which is the proof of the gap rather than a reassurance. Thirteen new tests now
+cover the window from both ends.
+
+### What was left behind
+
+`npm run reconcile` counts attendance twice — once as a plain SQL sum over the
+register, once through the compliance engine — and exits non-zero if they
+disagree. The unit tests now stop this rule from regressing, but no test can
+catch the other half: a discrepancy where the code is right and the data
+disagrees with itself, such as a departed person who is still being ticked in.
+That needs a number checked against a number, on the real database.
+
+Two people are in exactly that state — Matthew Rudd and Isabella Martinez, both
+marked departed, both with PRESENT rows after the fact. Both now resolve
+correctly, but it is worth knowing the register let it happen.
+
+One display wart fixed alongside. The CLI report printed Thursday's long-term
+average as `0.0T` for everybody. Thursday has no complete month behind it yet,
+so the average was truthfully zero and read as "never comes in on a Thursday" —
+the single conclusion the number cannot support. The verdict already ignored
+these; the column now prints `–T` and stops contradicting it. The web table
+already faded them.

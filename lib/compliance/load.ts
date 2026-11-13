@@ -8,7 +8,7 @@
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as s from "../db/schema";
-import { evaluateEmployee, requiredDaysFor } from "./rules";
+import { employmentEnd, evaluateEmployee, requiredDaysFor } from "./rules";
 import type {
   AttendanceState,
   CalendarDay,
@@ -184,9 +184,10 @@ export async function loadEmployeeRows(
       .map((day) => {
         const record = details?.get(day.date);
         const reason = record?.reasonId ? reasonById.get(record.reasonId) : undefined;
+        const left = employmentEnd(input);
         const outsideEmployment =
           (!!employee.firstSeenDate && day.date < employee.firstSeenDate) ||
-          (!!employee.lastSeenDate && day.date > employee.lastSeenDate);
+          (!!left && day.date > left);
 
         return {
           date: day.date,

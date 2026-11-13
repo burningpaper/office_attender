@@ -85,19 +85,64 @@ export function activeExemption(
  * That is the right way round, because the alternative is chasing somebody on
  * the strength of a form that has not been filled in.
  */
+/**
+ * The day employment ended, as far as any rule is concerned.
+ *
+ * `lastSeenDate` records the last sheet or roster somebody's name appeared on.
+ * While a month arrived as a spreadsheet that doubled as the day they left - a
+ * name stopped being printed because its owner had gone, and reading it as an
+ * end date was right.
+ *
+ * The register broke that equivalence and nothing noticed. Nothing advances the
+ * column now, so for anybody still employed it records the date of the last
+ * import and says nothing whatever about what is expected of them. Cape Town's
+ * last workbook covered September, so all 61 of its people carried
+ * `last_seen_date = 2026-09-30` into October and November, and every required
+ * day in both months was filtered out from under them: ticked in on the
+ * register, reported as 0/0 with nothing to judge. Durban and Johannesburg
+ * were fine, having been created by paths that never set the column.
+ *
+ * So it ends employment only for somebody who has actually left. Departure is
+ * what `status` records, and it arrives here as `hasLeft`. For everybody else
+ * there is no end date and the month is judged in full.
+ *
+ * For a leaver the column is still stale, so it is not trusted alone either.
+ * Matthew Rudd was marked departed on 11 November, having been in the office on
+ * the 5th and 6th - his register entries for those days read "last day". His
+ * `last_seen_date` said 30 September, so those two days fell outside the window
+ * and the report dropped them. Somebody standing in the office is the strongest
+ * evidence there is that they had not yet left, which is the same reasoning the
+ * importer already applies when a roster omits a name that attendance records:
+ * having been in the office is not something a roster date can overrule.
+ *
+ * Only PRESENT extends the window, never an absence. A stray ABSENT row dated
+ * after somebody left would otherwise reopen the window and mark them
+ * non-compliant for days they were no longer employed.
+ */
+export function employmentEnd(employee: EmployeeInput): string | null {
+  if (!employee.hasLeft) return null;
+
+  const lastPresent = lastAttended(employee);
+  if (!employee.lastSeenDate) return lastPresent;
+  if (!lastPresent) return employee.lastSeenDate;
+  return lastPresent > employee.lastSeenDate ? lastPresent : employee.lastSeenDate;
+}
+
 export function requiredDaysFor(
   employee: EmployeeInput,
   calendar: CalendarDay[],
   window: { start: string; end: string },
   asOf: string,
 ): string[] {
+  const left = employmentEnd(employee);
+
   return calendar
     .filter((day) => {
       if (!day.isRequiredDay) return false;
       if (day.date < window.start || day.date > window.end) return false;
       if (day.date >= asOf) return false; // not yet finished
       if (employee.firstSeenDate && day.date < employee.firstSeenDate) return false;
-      if (employee.lastSeenDate && day.date > employee.lastSeenDate) return false;
+      if (left && day.date > left) return false;
       return true;
     })
     .map((day) => day.date);
@@ -480,7 +525,8 @@ export function completeMonthsFor(
       cursor.setUTCMonth(monthIndex + 1);
       continue; // joined after the month's first required day
     }
-    if (employee.lastSeenDate && employee.lastSeenDate < lastRequired) break;
+    const left = employmentEnd(employee);
+    if (left && left < lastRequired) break;
 
     months.push(month);
     cursor.setUTCMonth(monthIndex + 1);
